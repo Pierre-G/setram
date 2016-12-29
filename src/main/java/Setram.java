@@ -101,8 +101,7 @@ public class Setram {
             }
 
 
-            htmlTextToDisplay = "DEBUG - dateAndHour : " + dateAndHour + "<br/>"
-                    + "Prochains trajets Université - République <br/>";
+            htmlTextToDisplay = "Prochains trajets Université - République <br/>";
             Integer i;
             for (i=0; i<itemsNumber/2; i++) {
                 htmlTextToDisplay = htmlTextToDisplay + plannedDepartures.get(i) + " - " + plannedArrivals.get(i) + "<br/>";
