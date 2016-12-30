@@ -1,5 +1,5 @@
 /**
- * Created by pierregrandjean on 28/12/2016.
+ * Created by Pierre Grandjean on 28/12/2016.
  */
 
 
@@ -59,15 +59,27 @@ public class Setram {
 
             List<DomText> items = (List<DomText>)timetablePage.getByXPath("//td[@class='ligne-heure']/text()");
 
-            ArrayList<String> plannedDepartures = new ArrayList<>();
-            ArrayList<String> plannedArrivals = new ArrayList<>();
+            ArrayList<Date> plannedDepartures = new ArrayList<>();
+            ArrayList<Date> plannedArrivals = new ArrayList<>();
+            SimpleDateFormat isoDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+            isoDateFormat.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
+            SimpleDateFormat justDayDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            justDayDateFormat.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
+            String day = justDayDateFormat.format(now);
+
             Integer itemsNumber = 0;
             for (DomText item : items) {
+                // We have to convert a String (HHhmm) into a Date
+                String[] parts = item.toString().split("h");
+                String hours = parts[0];
+                String minutes = parts[1];
+                Date date = isoDateFormat.parse(day + "T" + hours + ":" + minutes + ":00");
+
                 if (itemsNumber%2 == 0) { // nombre pair
-                    plannedDepartures.add(item.toString());
+                    plannedDepartures.add(date);
                 }
                 else { // nombre impair
-                    plannedArrivals.add(item.toString());
+                    plannedArrivals.add(date);
                 }
                 itemsNumber++;
             }
@@ -88,27 +100,29 @@ public class Setram {
             HtmlPage realTimePage = webClient.getPage(requestSettings);
 
             List<DomText> realTimes = (List<DomText>)realTimePage.getByXPath("//li[@id]/text()");
-            ArrayList<String> realDepartures = new ArrayList<>();
+            ArrayList<Integer> realMinutesBeforeDepartures = new ArrayList<>();
             for (DomText realTime : realTimes) {
                 String toWorkString = realTime.toString();
-                if (!toWorkString.contains("dans ")) {
-                    realDepartures.add("Imminent");
+                if (!toWorkString.contains("dans ")) { // TODO : à changer car on peut avoir "Passage suivant à 12 H 34 pour REPUBLIQUE"
+                    realMinutesBeforeDepartures.add(0);
                 }
                 else {
                     String requiredString = toWorkString.substring(toWorkString.indexOf("dans ") + 5, toWorkString.indexOf(" minutes"));
-                    realDepartures.add(requiredString);
+                    realMinutesBeforeDepartures.add(Integer.parseInt(requiredString));
                 }
             }
 
 
-            htmlTextToDisplay = "Prochains trajets Université - République <br/>";
+            htmlTextToDisplay = "Prochains trajets Université - Saint Martin : <br/>";
             Integer i;
             for (i=0; i<itemsNumber/2; i++) {
-                htmlTextToDisplay = htmlTextToDisplay + plannedDepartures.get(i) + " - " + plannedArrivals.get(i) + "<br/>";
+                htmlTextToDisplay = htmlTextToDisplay + isoDateFormat.format(plannedDepartures.get(i)) + " - " + isoDateFormat.format(plannedArrivals.get(i)) + "<br/>";
             }
             htmlTextToDisplay = htmlTextToDisplay + "Réels départs dans (en minutes) : <br/>";
-            for (String realDeparture : realDepartures) {
-                htmlTextToDisplay = htmlTextToDisplay + realDeparture + "<br/>";
+            for (Integer realMinutesBeforeDeparture : realMinutesBeforeDepartures) {
+                long durationDate = plannedArrivals.get(0).getTime() - plannedDepartures.get(0).getTime();
+                htmlTextToDisplay = htmlTextToDisplay + realMinutesBeforeDeparture + "<br/>"
+                + " durée trajet : " + durationDate/(1000*60) + "minutes<br/>";
             }
 
         }catch(Exception e){
