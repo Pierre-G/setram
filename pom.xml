@@ -20,6 +20,16 @@
             <artifactId>htmlunit</artifactId>
             <version>2.23</version>
         </dependency>
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.8.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>mongo-java-driver</artifactId>
+            <version>3.2.2</version>
+        </dependency>
     </dependencies>
     <dependencyManagement>
         <!-- Found on http://stackoverflow.com/questions/35157100/maven-dependency-conflict-with-spark-and-htmlunit/35157176 -->

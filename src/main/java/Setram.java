@@ -2,7 +2,10 @@
  * Created by Pierre Grandjean on 28/12/2016.
  */
 
-import static spark.Spark.*;
+import static org.apache.commons.lang3.StringUtils.isNumeric;
+import static org.apache.commons.lang3.StringUtils.remove;
+import static spark.Spark.port;
+import static spark.Spark.get;
 
 import com.gargoylesoftware.htmlunit.HttpMethod;
 import com.gargoylesoftware.htmlunit.WebClient;
@@ -11,36 +14,50 @@ import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import com.gargoylesoftware.htmlunit.html.DomText;
 import com.gargoylesoftware.htmlunit.util.NameValuePair;
 
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+
+import com.mongodb.BasicDBObject;
+import com.mongodb.DB;
+import com.mongodb.DBCollection;
+import com.mongodb.MongoClient;
+import com.mongodb.MongoClientURI;
+import com.mongodb.MongoException;
+import org.apache.commons.lang3.time.DateUtils;
+import org.jsoup.select.Elements;
+
 import java.net.URL;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+
+import java.io.IOException;
+
 
 public class Setram {
     public static void main(String[] args) {
 
         port(Integer.valueOf(System.getenv("PORT")));
 
-        WebClient client = new WebClient();
-        client.getOptions().setCssEnabled(false);
-        client.getOptions().setJavaScriptEnabled(false);
         try {
 
-            get("/", (req, res) -> display(client) );
+            get("/", (req, res) -> display() );
+            get("/timetable/", (req, res) -> addToTimetable() );
 
-        }catch(Exception e){
+        } catch(Exception e){
             e.printStackTrace();
         }
 
     }
 
-    private static String display(WebClient client) {
+    private static String display() {
+
+        WebClient client = new WebClient();
+        client.getOptions().setCssEnabled(false);
+        client.getOptions().setJavaScriptEnabled(false);
 
         Date now = new Date();
-
-        // To forge searchURL, we have to capture date and hour as : time=07|29&date=2016|12|28
-        SimpleDateFormat customDateFormat = new SimpleDateFormat("'time='HH|mm'&date='yyyy|MM|dd");
-        customDateFormat.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
-        String dateForSearchUrl = customDateFormat.format(now);
 
         SimpleDateFormat isoDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
         isoDateFormat.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
@@ -48,83 +65,101 @@ public class Setram {
         justDayDateFormat.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
         String day = justDayDateFormat.format(now);
 
+        SimpleDateFormat justDayDateFormatForSearchUrl = new SimpleDateFormat("yyyy|MM|d");
+        justDayDateFormatForSearchUrl.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
+        String dayForSearchUrl = justDayDateFormatForSearchUrl.format(now);
+
+        String searchUrlWithoutDate;
+
         String htmlTextToDisplay = "ERROR in display() method";
 
-        try {
-            // TODO : refactor this commented part as a method
-/*
-            String searchUrl = "http://setram.mobi/module/mobile/itineraire/iti_choix.php?depart=StopArea%7C342%7CUniversite%7CLe_Mans%7C%7C%7C437035%7C2337548%7C678%210%2114%3B677%210%2114%3B680%210%2114%3B679%210%2114%3B&arrive=StopArea%7C321%7CSaint_Martin%7CLe_Mans%7C%7C%7C440979%7C2333984%7C632%210%2114%3B629%210%2114%3B631%210%2114%3B630%210%2114%3B&sens=1&" + dateForSearchUrl;
-            HtmlPage timetablePage = client.getPage(searchUrl);
 
-            List<DomText> items = (List<DomText>)timetablePage.getByXPath("//td[@class='ligne-heure']/text()");
+        ArrayList<NameValuePair> realMinutesBeforeDepartures = new ArrayList<>();
+        NameValuePair params[] = new NameValuePair[3];
+        params[0] = new NameValuePair("a", "refresh");
 
-            ArrayList<Date> plannedDepartures = new ArrayList<>();
-            ArrayList<Date> plannedArrivals = new ArrayList<>();
+        // Securité Sociale - Bus 3 - Vers République
+        params[1] = new NameValuePair("refs", "268640008|268633352");
+        params[2] = new NameValuePair("ran", "524818637");
+        addRealMinutesBeforeDepartures("Bus 3 dir Oasis", realMinutesBeforeDepartures, params, now, isoDateFormat, day);
 
-            Integer itemsNumber = 0;
-            for (DomText item : items) {
-                // We have to convert a String (HHhmm) into a Date
-                String[] parts = item.toString().split("h");
-                String hours = parts[0];
-                String minutes = parts[1];
-                Date date = isoDateFormat.parse(day + "T" + hours + ":" + minutes + ":00");
+        // Securité Sociale - Bus 12 - Vers République
+        params[1] = new NameValuePair("refs", "269260050");
+        params[2] = new NameValuePair("ran", "663034440");
+        addRealMinutesBeforeDepartures("Bus 12 dir République", realMinutesBeforeDepartures, params, now, isoDateFormat, day);
 
-                if (itemsNumber%2 == 0) { // nombre pair
-                    plannedDepartures.add(date);
-                }
-                else { // nombre impair
-                    plannedArrivals.add(date);
-                }
-                itemsNumber++;
-            }
-*/
+        // Securité Sociale - Bus 23 - Vers République
+        params[1] = new NameValuePair("refs", "269979663");
+        params[2] = new NameValuePair("ran", "177820456");
+        addRealMinutesBeforeDepartures("Bus 23 dir République", realMinutesBeforeDepartures, params, now, isoDateFormat, day);
 
-            ArrayList<NameValuePair> realMinutesBeforeDepartures = new ArrayList<NameValuePair>();
-            NameValuePair params[] = new NameValuePair[3];
-            params[0] = new NameValuePair("a", "refresh");
+        // Securité Sociale - Bus 25 - Vers République
+        params[1] = new NameValuePair("refs", "270112787|270112533|270111761|270111507");
+        params[2] = new NameValuePair("ran", "452935723");
+        addRealMinutesBeforeDepartures("Bus 25 dir République", realMinutesBeforeDepartures, params, now, isoDateFormat, day);
 
-            // Securité Sociale - Bus 3 - Vers République
-            params[1] = new NameValuePair("refs", "268640008|268633352");
-            params[2] = new NameValuePair("ran", "524818637");
-            addRealMinutesBeforeDepartures("Bus 3 dir Oasis", realMinutesBeforeDepartures, params, now, isoDateFormat, day);
+        htmlTextToDisplay = "Prochains départ de Sécurité Sociale : <br/>";
 
-            // Securité Sociale - Bus 12 - Vers République
-            params[1] = new NameValuePair("refs", "269260050");
-            params[2] = new NameValuePair("ran", "663034440");
-            addRealMinutesBeforeDepartures("Bus 12 dir République", realMinutesBeforeDepartures, params, now, isoDateFormat, day);
+        // Sorting
+        Collections.sort(realMinutesBeforeDepartures, comp);
 
-            // Securité Sociale - Bus 23 - Vers République
-            params[1] = new NameValuePair("refs", "269979663");
-            params[2] = new NameValuePair("ran", "177820456");
-            addRealMinutesBeforeDepartures("Bus 23 dir République", realMinutesBeforeDepartures, params, now, isoDateFormat, day);
-
-            // Securité Sociale - Bus 25 - Vers République
-            params[1] = new NameValuePair("refs", "270112787|270112533|270111761|270111507");
-            params[2] = new NameValuePair("ran", "452935723");
-            addRealMinutesBeforeDepartures("Bus 25 dir République", realMinutesBeforeDepartures, params, now, isoDateFormat, day);
-
-            htmlTextToDisplay = "Prochains départ de Sécurité Sociale : <br/>";
-/*
-            Integer i;
-            for (i=0; i<itemsNumber/2; i++) {
-                htmlTextToDisplay = htmlTextToDisplay + isoDateFormat.format(plannedDepartures.get(i)) + " - " + isoDateFormat.format(plannedArrivals.get(i)) + "<br/>";
-            }
-            htmlTextToDisplay = htmlTextToDisplay + "Réels départs dans (en minutes) : <br/>";
-*/
-
-            // Sorting
-            Collections.sort(realMinutesBeforeDepartures, comp);
-
-            for (NameValuePair realMinutesBeforeDeparture : realMinutesBeforeDepartures) {
-//                long durationDate = plannedArrivals.get(0).getTime() - plannedDepartures.get(0).getTime();
-                htmlTextToDisplay = htmlTextToDisplay + realMinutesBeforeDeparture.getValue() + " (" + realMinutesBeforeDeparture.getName() + ")<br/>";
-//                + " durée trajet : " + durationDate/(1000*60) + "minutes<br/>";
-            }
-
+        for (NameValuePair realMinutesBeforeDeparture : realMinutesBeforeDepartures) {
+            htmlTextToDisplay = htmlTextToDisplay + realMinutesBeforeDeparture.getValue() + " minutes (" + realMinutesBeforeDeparture.getName() + ")<br/>";
         }
-        catch(Exception e){
-            e.printStackTrace();
-        }
+
+
+        return htmlTextToDisplay;
+
+    }
+
+
+    private static String addToTimetable() throws IOException, ParseException {
+        Date now = new Date();
+
+        SimpleDateFormat isoDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+        isoDateFormat.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
+        SimpleDateFormat justDayDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+        justDayDateFormat.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
+        String day = justDayDateFormat.format(now);
+
+        SimpleDateFormat justDayDateFormatForSearchUrl = new SimpleDateFormat("yyyy|MM|d");
+        justDayDateFormatForSearchUrl.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
+        String dayForSearchUrl = justDayDateFormatForSearchUrl.format(now);
+
+        String searchUrlWithoutDate;
+
+        String htmlTextToDisplay = "";
+
+        htmlTextToDisplay = htmlTextToDisplay + "Recording Tram 1 direction Antarès-MMArena, Arrêt Université ...<br/>";
+        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1%7CSTA1%7CSetram&Line=27%7CSET33%7CT1%7CAntar%E8s%20-%20Universit%E9%7CAntar%E8s%20vers%20Universit%E9%7CUniversit%E9%20vers%20Antar%E8s%7C16%7CTramway&Direction=-1&StopArea=342%7CSET1606%7CUniversite%7CLe%20Mans&Date=";
+        captureTimetable("Tram 1 dir. Antarès-MMArena", "Université", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
+        htmlTextToDisplay = htmlTextToDisplay + "... done<br/>";
+
+        htmlTextToDisplay = htmlTextToDisplay + "Recording Tram 1 direction Antarès-MMArena, Arrêt Gambetta-Mûriers ...<br/>";
+        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1%7CSTA1%7CSetram&Line=27%7CSET33%7CT1%7CAntar%E8s%20-%20Universit%E9%7CAntar%E8s%20vers%20Universit%E9%7CUniversit%E9%20vers%20Antar%E8s%7C16%7CTramway&Direction=-1&StopArea=204%7CSET1590%7CGambetta-muriers%7CLe%20Mans&Date=";
+        captureTimetable("Tram 1 dir. Antarès-MMArena", "Gambetta-Mûriers", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
+        htmlTextToDisplay = htmlTextToDisplay + "... done<br/>";
+
+        htmlTextToDisplay = htmlTextToDisplay + "Recording Tram 1 direction Antarès-MMArena, Arrêt Éperon Cité Plantagenêt ...<br/>";
+        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1%7CSTA1%7CSetram&Line=27%7CSET33%7CT1%7CAntar%E8s%20-%20Universit%E9%7CAntar%E8s%20vers%20Universit%E9%7CUniversit%E9%20vers%20Antar%E8s%7C16%7CTramway&Direction=-1&StopArea=185%7CSET130%7CEperon%7CLe%20Mans&Date=";
+        captureTimetable("Tram 1 dir. Antarès-MMArena", "Éperon Cité Plantagenêt", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
+        htmlTextToDisplay = htmlTextToDisplay + "... done<br/>";
+
+        htmlTextToDisplay = htmlTextToDisplay + "Recording Tram 1 direction Antarès-MMArena, Arrêt République ...<br/>";
+        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1%7CSTA1%7CSetram&Line=27%7CSET33%7CT1%7CAntar%E8s%20-%20Universit%E9%7CAntar%E8s%20vers%20Universit%E9%7CUniversit%E9%20vers%20Antar%E8s%7C16%7CTramway&Direction=-1&StopArea=318%7CSET318%7CR%E9publique%7CLe%20Mans&Date=";
+        captureTimetable("Tram 1 dir. Antarès-MMArena", "République", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
+        htmlTextToDisplay = htmlTextToDisplay + "... done<br/>";
+
+        htmlTextToDisplay = htmlTextToDisplay + "Recording Tram 1 direction Antarès-MMArena, Arrêt Saint-Martin ...<br/>";
+        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1%7CSTA1%7CSetram&Line=27%7CSET33%7CT1%7CAntar%E8s%20-%20Universit%E9%7CAntar%E8s%20vers%20Universit%E9%7CUniversit%E9%20vers%20Antar%E8s%7C16%7CTramway&Direction=-1&StopArea=321%7CSET357%7CSaint%20Martin%7CLe%20Mans&Date=";
+        captureTimetable("Tram 1 dir. Antarès-MMArena", "Saint-Martin", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
+        htmlTextToDisplay = htmlTextToDisplay + "... done<br/>";
+
+
+        htmlTextToDisplay = htmlTextToDisplay + "Recording Bus 12 direction Antarès-MMArena, Arrêt Californie ...<br/>";
+        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=9|SET52|12|R%EF%BF%BDpublique%20-%20St%20Martin|R%EF%BF%BDpublique%20vers%20St%20Martin|St%20Martin%20vers%20R%EF%BF%BDpublique|5|Bus&Direction=1&StopArea=143|SET64|Californie|Le%20Mans&Date=";
+        captureTimetable("Bus 12 dir. Saint-Martin", "Californie", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
+        htmlTextToDisplay = htmlTextToDisplay + "... done<br/>";
 
         return htmlTextToDisplay;
 
@@ -151,10 +186,10 @@ public class Setram {
             List<DomText> realTimes = (List<DomText>)realTimePage.getByXPath("//li[@id]/text()");
             for (DomText realTime : realTimes) {
                 String toWorkString = realTime.toString();
-                if (toWorkString.contains("imminent")) { // For strings like "Passage imminent"
+                if ( !toWorkString.contains("minutes") && !toWorkString.contains("H") ) { // For strings that do not mention any time, it's now
                     realMinutesBeforeDepartures.add(new NameValuePair(busLine, Integer.toString(0)));
                 }
-                else if (!toWorkString.contains("dans")) { // For strings like "Passage suivant à 12 H 34 pour REPUBLIQUE"
+                else if (toWorkString.contains("H")) { // For strings like "Passage suivant à 12 H 34 pour REPUBLIQUE"
                     String hourString = toWorkString.substring(toWorkString.indexOf("à ") + 2, toWorkString.indexOf(" pour"));
                     // We have to convert a String (HH H mm) into a Date
                     String[] parts = hourString.split(" H ");
@@ -173,19 +208,68 @@ public class Setram {
                 }
             }
 
-        }
-        catch(Exception e){
+        } catch(Exception e){
             e.printStackTrace();
         }
         return realMinutesBeforeDepartures;
 
     }
 
-    public static Comparator<NameValuePair> comp = new Comparator<NameValuePair>() {        // solution than making method synchronized
+
+    private static Comparator<NameValuePair> comp = new Comparator<NameValuePair>() {
         @Override
         public int compare(NameValuePair p1, NameValuePair p2) {
-            return p1.getValue().compareTo(p2.getValue());
+            // return p1.getValue().compareTo(p2.getValue());
+            return Integer.parseInt(p1.getValue()) - Integer.parseInt(p2.getValue());
         }
     };
+
+
+    private static void captureTimetable(String busLine, String stop, String searchUrlWithoutDate, SimpleDateFormat isoDateFormat, String day, String dayForSearchUrl) throws IOException, ParseException {
+
+        DBCollection myCollection = connectToDB("timetable");
+
+        Document doc = Jsoup.connect(searchUrlWithoutDate + dayForSearchUrl).get();
+
+        boolean existingColumn = true;
+        Integer i = 0;
+        while (existingColumn) {
+            Elements el = doc.select("table.standard td:eq(" + i + ")");
+            existingColumn = !el.isEmpty();
+            boolean firstRow = true;
+            String hour = "";
+            for (Element e : el) {  // For each element of the column
+                if (firstRow) {     // We set the hour, displayed by the first row
+                    hour = remove(e.text(), "h");
+                    firstRow = false;
+                }
+                else {  // We record the dates
+                    if (isNumeric(e.text())) {  // The empty table cells contains white space character
+                        Date date = isoDateFormat.parse(day + "T" + hour + ":" + e.text() + ":00");
+                        BasicDBObject document = new BasicDBObject();
+                        document.put("busLine", busLine);
+                        document.put("stop", stop);
+                        document.put("stopDate", date);
+                        myCollection.update(document, document, true, false); // Upsert allows to insert only if it doesn't already exists
+                    }
+                }
+            }
+            i++;
+        }
+    }
+
+
+    private static DBCollection connectToDB(String collectionName) {
+        DBCollection collection = null;
+        try {
+            MongoClientURI uri = new MongoClientURI(System.getenv("MONGODB_URI"));
+            MongoClient mongoClient = new MongoClient(uri);
+            DB db = mongoClient.getDB(System.getenv("MONGODB_DATABASE"));
+            collection = db.getCollection(collectionName);
+        } catch (MongoException e) {
+            e.printStackTrace();
+        }
+        return collection;
+    }
 
 }
