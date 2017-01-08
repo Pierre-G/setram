@@ -30,6 +30,11 @@
             <artifactId>mongo-java-driver</artifactId>
             <version>3.2.2</version>
         </dependency>
+        <dependency>
+            <groupId>org.neo4j.driver</groupId>
+            <artifactId>neo4j-java-driver</artifactId>
+            <version>1.0.6</version>
+        </dependency>
     </dependencies>
     <dependencyManagement>
         <!-- Found on http://stackoverflow.com/questions/35157100/maven-dependency-conflict-with-spark-and-htmlunit/35157176 -->
