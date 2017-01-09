@@ -2,12 +2,12 @@
 
 CREATE
 // Bus and trams
-    (t1_antares:Tram {name:'Tram 1 dir. Antarès-MMArena'}),
-    (t1_universite:Tram {name:'Tram 1 dir. Université'}),
-    (b3_gazonfier:Bus {name:'Bus 3 dir. Gazonfier'}),
-    (b3_oasis:Bus {name:'Bus 3 dir. Oasis - Centre des Expositions'}),
-    (b12_republique:Bus {name:'Bus 12 dir. République'}),
-    (b12_stMartin:Bus {name:'Bus 12 dir. Saint-Martin'}),
+    (t1_antares:Tram {name:'Tram 1 dir. Antarès-MMArena', stringForTimetable:'27|SET33|T1|Antar%E8s%20-%20Universit%E9|Antar%E8s%20vers%20Universit%E9|Universit%E9%20vers%20Antar%E8s|16|Tramway&Direction=-1'}),
+    (t1_universite:Tram {name:'Tram 1 dir. Université', stringForTimetable:'27|SET33|T1|Antar%E8s%20-%20Universit%E9|Antar%E8s%20vers%20Universit%E9|Universit%E9%20vers%20Antar%E8s|16|Tramway&Direction=1'}),
+    (b3_gazonfier:Bus {name:'Bus 3 dir. Gazonfier', stringForTimetable:'2|SET36|03|Gazonfier%20-%20Oasis|Gazonfier%20vers%20Oasis|Oasis%20vers%20Gazonfier|5|Bus&Direction=-1'}),
+    (b3_oasis:Bus {name:'Bus 3 dir. Oasis - Centre des Expositions', stringForTimetable:'2|SET36|03|Gazonfier%20-%20Oasis|Gazonfier%20vers%20Oasis|Oasis%20vers%20Gazonfier|5|Bus&Direction=1'}),
+    (b12_republique:Bus {name:'Bus 12 dir. République', stringForTimetable:'9|SET52|12|R%E9publique%20-%20St%20Martin|R%E9publique%20vers%20St%20Martin|St%20Martin%20vers%20R%E9publique|5|Bus&Direction=-1'}),
+    (b12_stMartin:Bus {name:'Bus 12 dir. Saint-Martin', stringForTimetable:'9|SET52|12|R%E9publique%20-%20St%20Martin|R%E9publique%20vers%20St%20Martin|St%20Martin%20vers%20R%E9publique|5|Bus&Direction=1'}),
     (b23_republique:Bus {name:'Bus 23 dir. République'}),
     (b23_yvre:Bus {name:'Bus 23 dir. Yvré-l\'Évêque'}),
     (b25_republique:Bus {name:'Bus 25 dir. République'}),

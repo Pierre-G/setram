@@ -124,8 +124,8 @@ public class Setram {
         htmlTextToDisplay = htmlTextToDisplay + "</p><p>Prochains départ de Californie : <br/>";
 
         ArrayList<String> busLines2 = new ArrayList<>();
-        busLines.add("Bus 12 dir. République");
-        busLines.add("Bus 12 dir. Saint-Martin");
+        busLines2.add("Bus 12 dir. République");
+        busLines2.add("Bus 12 dir. Saint-Martin");
 
         ArrayList<NameValuePair> realMinutesBeforeDepartures2 = readRealMinutesBeforeDepartures("Californie", busLines2, now, isoDateFormat, day);
 
