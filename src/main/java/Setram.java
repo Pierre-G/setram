@@ -47,11 +47,16 @@ public class Setram {
             get("/", (req, res) -> display() );
             get("/timetable/", (req, res) -> addToTimetable() );
             get("/test/", (req, res) -> test() );
+            get("/donotsleep/", (req, res) -> donotsleep() );
 
         } catch(Exception e){
             e.printStackTrace();
         }
 
+    }
+
+    private static String donotsleep() {
+        return "I'm awake!";
     }
 
     private static String test() {
@@ -136,6 +141,20 @@ public class Setram {
         htmlTextToDisplay = htmlTextToDisplay + "</p>";
 
 
+        htmlTextToDisplay = htmlTextToDisplay + "</p><p>Prochains départ d'Université : <br/>";
+
+        ArrayList<String> busLines3 = new ArrayList<>();
+        busLines3.add("Tram 1 dir. Antarès-MMArena");
+
+        ArrayList<NameValuePair> realMinutesBeforeDepartures3 = readRealMinutesBeforeDepartures("Université", busLines3, now, isoDateFormat, day);
+
+        for (NameValuePair realMinutesBeforeDeparture : realMinutesBeforeDepartures3) {
+            htmlTextToDisplay = htmlTextToDisplay + realMinutesBeforeDeparture.getValue() + " minutes (" + realMinutesBeforeDeparture.getName() + ")<br/>";
+        }
+
+        htmlTextToDisplay = htmlTextToDisplay + "</p>";
+
+
         return htmlTextToDisplay;
 
     }
@@ -151,7 +170,7 @@ public class Setram {
         Session session = driver.session();
 
         for (String busLine : busLines) {
-            StatementResult result = session.run("MATCH (b:Bus {name: {busLine}})-[r:STOPS_AT]->(s:Stop {name: {stopArea}}) " +
+            StatementResult result = session.run("MATCH (b {name: {busLine}})-[r:STOPS_AT]->(s:Stop {name: {stopArea}}) " +
                     "RETURN r.refs AS refs, r.ran AS ran",
                     parameters("busLine", busLine, "stopArea", stopArea));
             while ( result.hasNext() )
@@ -187,57 +206,35 @@ public class Setram {
         justDayDateFormatForSearchUrl.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
         String dayForSearchUrl = justDayDateFormatForSearchUrl.format(now);
 
-        Map<String,String> mapBusLines = new HashMap<String,String>();
-        mapBusLines.put("Tram 1 dir. Antarès-MMArena", "27|SET33|T1|Antar%E8s%20-%20Universit%E9|Antar%E8s%20vers%20Universit%E9|Universit%E9%20vers%20Antar%E8s|16|Tramway&Direction=-1");
-        mapBusLines.put("Bus 3 dir. Oasis - Centre des Expositions", "2|SET36|03|Gazonfier%20-%20Oasis|Gazonfier%20vers%20Oasis|Oasis%20vers%20Gazonfier|5|Bus&Direction=1");
-        mapBusLines.put("Bus 12 dir. Saint-Martin", "9|SET52|12|R%E9publique%20-%20St%20Martin|R%E9publique%20vers%20St%20Martin|St%20Martin%20vers%20R%E9publique|5|Bus&Direction=1");
-
-        Map<String,String> mapStops = new HashMap<String,String>();
-        mapStops.put("Université", "342|SET1606|Universite|Le%20Mans");
-        mapStops.put("Gambetta-Mûriers", "204|SET1590|Gambetta-muriers|Le%20Mans");
-        mapStops.put("Éperon Cité Plantagenêt", "185|SET130|Eperon|Le%20Mans");
-        mapStops.put("République", "318|SET318|R%E9publique|Le%20Mans");
-        mapStops.put("Saint-Martin", "321|SET357|Saint%20Martin");
-        mapStops.put("Californie", "143|SET64|Californie|Le%20Mans");
-        mapStops.put("Sécurité Sociale", "338|SET344|S%E9curit%E9%20Sociale|Le%20Mans");
+        Driver driver = GraphDatabase.driver( System.getenv("GRAPHENEDB_BOLT_URL"), AuthTokens.basic( System.getenv("GRAPHENEDB_BOLT_USER"), System.getenv("GRAPHENEDB_BOLT_PASSWORD") ) );
+        Session session = driver.session();
 
         String searchUrlPart1BeforeBusLine = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=";
         String searchUrlPart2BeforeStop = "&StopArea=";
         String searchUrlPart3BeforeDate = "&Date=";
 
-        String busLine;
-        String stop;
+        try {
+            StatementResult resultBusLines = session.run("MATCH (n) " +
+                    "WHERE n:Bus OR n:Tram " +
+                    "RETURN n.name AS name, n.stringForTimetable AS stringForTimetable");
+            while (resultBusLines.hasNext()) {
+                Record busLineRecord = resultBusLines.next();
+                StatementResult resultStops = session.run("MATCH (n {name: {busLine}})-[STOPS_AT]->(s)" +
+                                "RETURN s.name AS name, s.stringForTimetable AS stringForTimetable",
+                        parameters("busLine", busLineRecord.get("name").asString()));
+                while (resultStops.hasNext()) {
+                    Record stopRecord = resultStops.next();
+                    String searchUrlWithoutDate = searchUrlPart1BeforeBusLine + busLineRecord.get("stringForTimetable").asString() + searchUrlPart2BeforeStop + stopRecord.get("stringForTimetable").asString() + searchUrlPart3BeforeDate;
+                    captureTimetable(busLineRecord.get("name").asString(), stopRecord.get("name").asString(), searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
+                    Thread.sleep(1000); // To be nice
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("ERROR: " + e);
+        }
 
-
-
-        //TODO : for each busLine, for each stop of this busLine :
-//        String searchUrlWithoutDate = searchUrlPart1BeforeBusLine + mapBusLines.get(busLine) + searchUrlPart2BeforeStop + mapStops.get(stop) + searchUrlPart3BeforeDate;
-//        captureTimetable(busLine, stop, searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
-
-
-/*
-        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=27|SET33|T1|Antar%E8s%20-%20Universit%E9|Antar%E8s%20vers%20Universit%E9|Universit%E9%20vers%20Antar%E8s|16|Tramway&Direction=-1&StopArea=342|SET1606|Universite|Le%20Mans&Date=";
-        captureTimetable("Tram 1 dir. Antarès-MMArena", "Université", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
-
-        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=27|SET33|T1|Antar%E8s%20-%20Universit%E9|Antar%E8s%20vers%20Universit%E9|Universit%E9%20vers%20Antar%E8s|16|Tramway&Direction=-1&StopArea=204|SET1590|Gambetta-muriers|Le%20Mans&Date=";
-        captureTimetable("Tram 1 dir. Antarès-MMArena", "Gambetta-Mûriers", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
-
-        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=27|SET33|T1|Antar%E8s%20-%20Universit%E9|Antar%E8s%20vers%20Universit%E9|Universit%E9%20vers%20Antar%E8s|16|Tramway&Direction=-1&StopArea=185|SET130|Eperon|Le%20Mans&Date=";
-        captureTimetable("Tram 1 dir. Antarès-MMArena", "Éperon Cité Plantagenêt", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
-
-        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=27|SET33|T1|Antar%E8s%20-%20Universit%E9|Antar%E8s%20vers%20Universit%E9|Universit%E9%20vers%20Antar%E8s|16|Tramway&Direction=-1&StopArea=318|SET318|R%E9publique|Le%20Mans&Date=";
-        captureTimetable("Tram 1 dir. Antarès-MMArena", "République", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
-
-        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=27|SET33|T1|Antar%E8s%20-%20Universit%E9|Antar%E8s%20vers%20Universit%E9|Universit%E9%20vers%20Antar%E8s|16|Tramway&Direction=-1&StopArea=321|SET357|Saint%20Martin|Le%20Mans&Date=";
-        captureTimetable("Tram 1 dir. Antarès-MMArena", "Saint-Martin", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
-
-
-        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=9|SET52|12|R%E9publique%20-%20St%20Martin|R%E9publique%20vers%20St%20Martin|St%20Martin%20vers%20R%E9publique|5|Bus&Direction=1&StopArea=143|SET64|Californie|Le%20Mans&Date=";
-        captureTimetable("Bus 12 dir. Saint-Martin", "Californie", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
-
-        searchUrlWithoutDate = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=2|SET36|03|Gazonfier%20-%20Oasis|Gazonfier%20vers%20Oasis|Oasis%20vers%20Gazonfier|5|Bus&Direction=1&StopArea=338|SET344|S%E9curit%E9%20Sociale|Le%20Mans&Date=";
-        captureTimetable("Bus 3 dir. Oasis - Centre des Expositions", "Sécurité Sociale", searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
-*/
+        driver.close();
+        session.close();
 
         return "Capture terminée";
 
