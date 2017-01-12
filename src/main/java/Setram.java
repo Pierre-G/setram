@@ -4,6 +4,7 @@
 
 import static org.apache.commons.lang3.StringUtils.isNumeric;
 import static org.apache.commons.lang3.StringUtils.remove;
+import static org.apache.commons.lang3.time.DateUtils.addDays;
 import static spark.Spark.port;
 import static spark.Spark.get;
 
@@ -193,25 +194,35 @@ public class Setram {
 
 
     private static String addToTimetable() throws IOException, ParseException {
+
+        // We open MongoDB and Neo4J connections
+
+        DBCollection myCollection = connectToMongoDB("timetable");
+
+        Driver driver = GraphDatabase.driver( System.getenv("GRAPHENEDB_BOLT_URL"), AuthTokens.basic( System.getenv("GRAPHENEDB_BOLT_USER"), System.getenv("GRAPHENEDB_BOLT_PASSWORD") ) );
+        Session session = driver.session();
+
+        // We build needed strings
+
         Date now = new Date();
+        Date tomorrow = addDays(now, 1);
 
         SimpleDateFormat isoDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
         isoDateFormat.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
 
         SimpleDateFormat justDayDateFormat = new SimpleDateFormat("yyyy-MM-dd");
         justDayDateFormat.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
-        String day = justDayDateFormat.format(now);
+        String day = justDayDateFormat.format(tomorrow);
 
         SimpleDateFormat justDayDateFormatForSearchUrl = new SimpleDateFormat("yyyy|MM|d");
         justDayDateFormatForSearchUrl.setTimeZone(TimeZone.getTimeZone("Europe/Paris"));
-        String dayForSearchUrl = justDayDateFormatForSearchUrl.format(now);
-
-        Driver driver = GraphDatabase.driver( System.getenv("GRAPHENEDB_BOLT_URL"), AuthTokens.basic( System.getenv("GRAPHENEDB_BOLT_USER"), System.getenv("GRAPHENEDB_BOLT_PASSWORD") ) );
-        Session session = driver.session();
+        String dayForSearchUrl = justDayDateFormatForSearchUrl.format(tomorrow);
 
         String searchUrlPart1BeforeBusLine = "http://lemans.prod.navitia.com/Navitia/HP_4_HP.asp?Network=1|STA1|Setram&Line=";
         String searchUrlPart2BeforeStop = "&StopArea=";
         String searchUrlPart3BeforeDate = "&Date=";
+
+        // We read Neo4J data and launch the process that get the site's data and record in MondoDB
 
         try {
             StatementResult resultBusLines = session.run("MATCH (n) " +
@@ -225,7 +236,7 @@ public class Setram {
                 while (resultStops.hasNext()) {
                     Record stopRecord = resultStops.next();
                     String searchUrlWithoutDate = searchUrlPart1BeforeBusLine + busLineRecord.get("stringForTimetable").asString() + searchUrlPart2BeforeStop + stopRecord.get("stringForTimetable").asString() + searchUrlPart3BeforeDate;
-                    captureTimetable(busLineRecord.get("name").asString(), stopRecord.get("name").asString(), searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
+                    captureTimetable(busLineRecord.get("name").asString(), stopRecord.get("name").asString(), searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl, myCollection);
                     Thread.sleep(1000); // To be nice
                 }
             }
@@ -300,9 +311,7 @@ public class Setram {
     };
 
 
-    private static void captureTimetable(String busLine, String stop, String searchUrlWithoutDate, SimpleDateFormat isoDateFormat, String day, String dayForSearchUrl) throws IOException, ParseException {
-
-        DBCollection myCollection = connectToMongoDB("timetable");
+    private static void captureTimetable(String busLine, String stop, String searchUrlWithoutDate, SimpleDateFormat isoDateFormat, String day, String dayForSearchUrl, DBCollection myCollection) throws IOException, ParseException {
 
         Document doc = Jsoup.connect(searchUrlWithoutDate + dayForSearchUrl).get();
 
@@ -319,7 +328,7 @@ public class Setram {
                     firstRow = false;
                 }
                 else {  // We record the dates
-                    if (isNumeric(e.text())) {  // The empty table cells contains white space character
+                    if (isNumeric(e.text())) {  // The empty table cells contain white space character
                         Date date = isoDateFormat.parse(day + "T" + hour + ":" + e.text() + ":00");
                         BasicDBObject document = new BasicDBObject();
                         document.put("busLine", busLine);
