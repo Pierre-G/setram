@@ -44,7 +44,13 @@ import java.io.IOException;
 
 public class Setram {
 
+    static GraphDatabaseService graphDb;
+
     public static void main(String[] args) {
+
+        File data = new File("data");
+        graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
+        registerShutdownHook( graphDb );
 
         port(Integer.valueOf(System.getenv("PORT")));
 
@@ -83,15 +89,11 @@ public class Setram {
 
     private static String test3() {
         System.out.println("test3.1");
-        File data = new File("data");
-        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
-        System.out.println("test3.2");
-        registerShutdownHook( graphDb );
         try ( Transaction tx = graphDb.beginTx() )
         {
             // Database operations go here
 
-            System.out.println("test3.3");
+            System.out.println("test3.2");
 
             Node firstNode = graphDb.createNode();
             firstNode.setProperty( "message", "Hello, " );
@@ -122,9 +124,6 @@ public class Setram {
 
 
     private static String initNeo4jDb() throws IOException {
-        File data = new File("data");
-        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
-        registerShutdownHook( graphDb );
 
         String query = "";
         query = readFile("Neo4j-data.cypher", Charset.defaultCharset());
@@ -147,9 +146,6 @@ public class Setram {
 
 
     private static String readNeo4jDb() {
-        File data = new File("data");
-        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
-        registerShutdownHook( graphDb );
         try ( Transaction tx = graphDb.beginTx() )
         {
             // Find all Stops
