@@ -28,6 +28,7 @@ import static org.neo4j.driver.v1.Values.parameters;
 */
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
+import org.neo4j.io.fs.FileUtils;
 
 import java.io.File;
 import java.net.URL;
@@ -125,6 +126,13 @@ public class Setram {
 
     private static String initNeo4jDb() throws IOException {
 
+        graphDb.shutdown();
+        clearNeo4jDb();
+
+        File data = new File("data");
+        graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
+        registerShutdownHook( graphDb );
+
         String query = "";
         query = readFile("Neo4j-data.cypher", Charset.defaultCharset());
         try ( Transaction tx = graphDb.beginTx() )
@@ -144,6 +152,13 @@ public class Setram {
         return new String(encoded, encoding);
     }
 
+    private static void clearNeo4jDb() {
+        try {
+            FileUtils.deleteRecursively(new File("data"));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     private static String readNeo4jDb() {
         try ( Transaction tx = graphDb.beginTx() )
