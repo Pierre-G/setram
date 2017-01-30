@@ -31,10 +31,17 @@
             <version>3.2.2</version>
         </dependency>
         <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j</artifactId>
+            <version>3.1.1</version>
+        </dependency>
+<!--
+        <dependency>
             <groupId>org.neo4j.driver</groupId>
             <artifactId>neo4j-java-driver</artifactId>
             <version>1.0.6</version>
         </dependency>
+-->
     </dependencies>
     <dependencyManagement>
         <!-- Found on http://stackoverflow.com/questions/35157100/maven-dependency-conflict-with-spark-and-htmlunit/35157176 -->
@@ -91,6 +98,31 @@
                         <goals>
                             <goal>single</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+<!-- See http://stackoverflow.com/questions/37797136/neo4j-3-0-x-postingsformat-with-name-blocktreeords-does-not-exist -->
+            <plugin>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>2.4.3</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+
+                                <!-- add Main-Class to manifest file -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>Setram</mainClass>
+                                </transformer>
+
+                                <!-- merge META-INF/services -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

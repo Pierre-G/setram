@@ -15,39 +15,47 @@ import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import com.gargoylesoftware.htmlunit.html.DomText;
 import com.gargoylesoftware.htmlunit.util.NameValuePair;
 
+import com.mongodb.*;
+import org.apache.commons.lang3.time.DateUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-import com.mongodb.BasicDBObject;
-import com.mongodb.DB;
-import com.mongodb.DBCollection;
-import com.mongodb.MongoClient;
-import com.mongodb.MongoClientURI;
-import com.mongodb.MongoException;
 import org.jsoup.select.Elements;
-
+/*
 import org.neo4j.driver.v1.*;
 import static org.neo4j.driver.v1.Values.parameters;
+*/
+import org.neo4j.graphdb.*;
+import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 
+import java.io.File;
 import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Duration;
 import java.util.*;
 
 import java.io.IOException;
 
 
 public class Setram {
+
     public static void main(String[] args) {
 
         port(Integer.valueOf(System.getenv("PORT")));
 
         try {
-
+/*
             get("/", (req, res) -> display() );
             get("/timetable/", (req, res) -> addToTimetable() );
-            get("/test/", (req, res) -> test() );
+*/
+            get("/test/", (req, res) -> test3() );
+            get("/init/", (req, res) -> initNeo4jDb() );
+            get("/read/", (req, res) -> readNeo4jDb());
             get("/donotsleep/", (req, res) -> donotsleep() );
 
         } catch(Exception e){
@@ -56,12 +64,260 @@ public class Setram {
 
     }
 
+
     private static String donotsleep() {
         return "I'm awake!";
     }
 
+
+    private static enum RelTypes implements RelationshipType
+    {
+        KNOWS
+    }
+
+    public enum Labels implements Label {
+        Stop,
+        Bus,
+        Tram;
+    }
+
+    private static String test3() {
+        System.out.println("test3.1");
+        File data = new File("data");
+        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
+        System.out.println("test3.2");
+        registerShutdownHook( graphDb );
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            // Database operations go here
+
+            System.out.println("test3.3");
+
+            Node firstNode = graphDb.createNode();
+            firstNode.setProperty( "message", "Hello, " );
+            Node secondNode = graphDb.createNode();
+            secondNode.setProperty( "message", "World!" );
+
+            Relationship relationship = firstNode.createRelationshipTo( secondNode, RelTypes.KNOWS );
+            relationship.setProperty( "message", "brave Neo4j " );
+
+            System.out.print( firstNode.getProperty( "message" ) );
+            System.out.print( relationship.getProperty( "message" ) );
+            System.out.print( secondNode.getProperty( "message" ) );
+
+            tx.success();
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+        try {
+            String content = readFile("Neo4j-data.cypher", Charset.defaultCharset());
+            return content;
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+        return "OK";
+    }
+
+
+    private static String initNeo4jDb() throws IOException {
+        File data = new File("data");
+        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
+        registerShutdownHook( graphDb );
+
+        String query = "";
+        query = readFile("Neo4j-data.cypher", Charset.defaultCharset());
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            graphDb.execute(query);
+            tx.success();
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+        return "OK";
+    }
+
+    private static String readFile(String path, Charset encoding)
+            throws IOException
+    {
+        byte[] encoded = Files.readAllBytes(Paths.get(path));
+        return new String(encoded, encoding);
+    }
+
+
+    private static String readNeo4jDb() {
+        File data = new File("data");
+        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
+        registerShutdownHook( graphDb );
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            // Find all Stops
+            ResourceIterator<Node> stops = graphDb.findNodes(Labels.Stop);
+            System.out.println( "Stops:" );
+            while( stops.hasNext() )
+            {
+                Node stop = stops.next();
+                System.out.println( "\t" + stop.getProperty( "name" ) );
+            }
+            tx.success();
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+
+        return "OK";
+    }
+
+
+
+
+    private static void registerShutdownHook( final GraphDatabaseService graphDb )
+    {
+        // Registers a shutdown hook for the Neo4j instance so that it
+        // shuts down nicely when the VM exits (even if you "Ctrl-C" the
+        // running application).
+        Runtime.getRuntime().addShutdownHook( new Thread()
+        {
+            @Override
+            public void run()
+            {
+                graphDb.shutdown();
+            }
+        } );
+    }
+
+/*
+
+    private static String addMinutesToNextStop(String busLine, String departure, String arrival, DBCollection myCollection) {
+
+        try {
+
+            BasicDBObject andQuery = new BasicDBObject();
+            List<BasicDBObject> obj1 = new ArrayList<BasicDBObject>();
+            obj1.add(new BasicDBObject("busLine", busLine));
+            obj1.add(new BasicDBObject("stop", departure));
+            andQuery.put("$and", obj1);
+
+            DBObject doc1 = myCollection.findOne(andQuery);
+            Date date1 = (Date) doc1.get("stopDate");
+
+            BasicDBObject dateQuery = new BasicDBObject();
+            dateQuery.put("stopDate", new BasicDBObject("$gte", date1));
+
+            BasicDBObject andQuery2 = new BasicDBObject();
+            List<BasicDBObject> obj2 = new ArrayList<BasicDBObject>();
+            obj2.add(new BasicDBObject("busLine", busLine));
+            obj2.add(new BasicDBObject("stop", arrival));
+            obj2.add(dateQuery);
+            andQuery2.put("$and", obj2);
+
+            DBObject doc2 = myCollection.findOne(andQuery2);
+            if (doc2 != null) {
+                Date date2 = (Date) doc2.get("stopDate");
+                Long minutesToNextStop = Duration.between(date1.toInstant(), date2.toInstant()).toMinutes();
+                return "    Date1 : " + date1 + " ;    Date2 : " + date2 + " ;    Durée : " + minutesToNextStop;
+            }
+            else {
+                if (busLine.equals("Tram 1 dir. Antarès-MMArena") && departure.equals("Guetteloup - Pôle Santé Sud") && arrival.equals("Antarès-MMArena")) {
+                    return "    Date1 : " + date1 + " ;    Date2 : " + DateUtils.addMinutes(date1, 4) + " ;    Durée : " + 4 ;
+                }
+                if (busLine.equals("Tram 1 dir. Université") && departure.equals("Campus-Ribay") && arrival.equals("Université")) {
+                    return "    Date1 : " + date1 + " ;    Date2 : " + DateUtils.addMinutes(date1, 2) + " ;    Durée : " + 2 ;
+                }
+                if (busLine.equals("Bus 3 dir. Gazonfier") && departure.equals("Charbonnière") && arrival.equals("Gazonfier")) {
+                    return "    Date1 : " + date1 + " ;    Date2 : " + DateUtils.addMinutes(date1, 2) + " ;    Durée : " + 2 ;
+                }
+                if (busLine.equals("Bus 3 dir. Oasis - Centre des Expositions") && departure.equals("Jules Védrines") && arrival.equals("Oasis - Centre des Expositions")) {
+                    return "    Date1 : " + date1 + " ;    Date2 : " + DateUtils.addMinutes(date1, 2) + " ;    Durée : " + 2 ;
+                }
+                if (busLine.equals("Bus 12 dir. République") && departure.equals("Comptes Du Maine - Office du Tourisme") && arrival.equals("République")) {
+                    return "    Date1 : " + date1 + " ;    Date2 : " + DateUtils.addMinutes(date1, 3) + " ;    Durée : " + 3 ;
+                }
+                if (busLine.equals("Bus 12 dir. Saint-Martin") && departure.equals("Pontlieue Jean Mac") && arrival.equals("Saint-Martin")) {
+                    return "    Date1 : " + date1 + " ;    Date2 : " + DateUtils.addMinutes(date1, 2) + " ;    Durée : " + 2 ;
+                }
+                if (busLine.equals("Bus 23 dir. République") && departure.equals("Comptes Du Maine - Office du Tourisme") && arrival.equals("République")) {
+                    return "    Date1 : " + date1 + " ;    Date2 : " + DateUtils.addMinutes(date1, 3) + " ;    Durée : " + 3 ;
+                }
+                if (busLine.equals("Bus 23 dir. Yvré-l'Évêque") && departure.equals("Collège Pasteur") && arrival.equals("Yvré-L'Évêque")) {
+                    return "    Date1 : " + date1 + " ;    Date2 : " + DateUtils.addMinutes(date1, 1) + " ;    Durée : " + 1 ;
+                }
+                if (busLine.equals("Bus 25 dir. République") && departure.equals("Comptes Du Maine - Office du Tourisme") && arrival.equals("République")) {
+                    return "    Date1 : " + date1 + " ;    Date2 : " + DateUtils.addMinutes(date1, 3) + " ;    Durée : " + 3 ;
+                }
+                else {
+                    return "NO ARRIVAL TIME! You have to manually set minutesToNextStop";
+                }
+            }
+
+
+        } catch (Exception e) {
+            return e.toString();
+        }
+    }
+
+
+
+    private static String test2() {
+
+        try {
+            // We open MongoDB and Neo4J connections
+
+            DBCollection myCollection = connectToMongoDB("timetable");
+
+            Driver driver = GraphDatabase.driver( System.getenv("GRAPHENEDB_BOLT_URL"), AuthTokens.basic( System.getenv("GRAPHENEDB_BOLT_USER"), System.getenv("GRAPHENEDB_BOLT_PASSWORD") ) );
+            Session session = driver.session();
+
+            StatementResult resultBusLines = session.run("MATCH (n) " +
+                    "WHERE n:Bus OR n:Tram " +
+                    "RETURN n.name AS name");
+            while (resultBusLines.hasNext()) {
+                Record busLineRecord = resultBusLines.next();
+                StatementResult resultStops = session.run("MATCH (n {name: {busLine}})-[STOPS_AT]->(s)" +
+                                "RETURN s.name AS name",
+                        parameters("busLine", busLineRecord.get("name").asString()));
+                System.out.println("======= busLine : " + busLineRecord.get("name") + " =======");
+                while (resultStops.hasNext()) {
+                    Record stopRecord = resultStops.next();
+                    StatementResult resultNextStops = session.run("MATCH (:Stop {name: {stop}})-[:NEXT {for: {busLine}}]->(s)" +
+                                    "RETURN s.name AS name",
+                            parameters("stop", stopRecord.get("name").asString(), "busLine", busLineRecord.get("name").asString()));
+                    while (resultNextStops.hasNext()) {
+                        Record nextStopRecord = resultNextStops.next();
+                        System.out.println("departure : " + stopRecord.get("name") + " ;    arrival : " + nextStopRecord.get("name"));
+                        String tempVar = addMinutesToNextStop(busLineRecord.get("name").asString(), stopRecord.get("name").asString(), nextStopRecord.get("name").asString(), myCollection);
+                        System.out.println(tempVar);
+                    }
+                }
+            }
+
+            return "End of processing";
+
+        } catch (Exception e) {
+            return e.toString();
+        }
+
+    }
+
     private static String test() {
-        return findTravelTime("Gare SNCF", "Saint-Martin", new Date());
+//        return findTravelTime("Gare SNCF", "Saint-Martin", new Date());
+
+        users = graphDB.findNodes( Labels.USER );
+        System.out.println("Users:");
+        while( users.hasNext() )
+        {
+            Node user = users.next();
+            System.out.print( "\t" + user.getProperty( "name" ) + " has seen " );
+            for( Relationship relationship : user.getRelationships(
+                    RelationshipTypes.HAS_SEEN ) )
+            {
+                Node movie = relationship.getOtherNode( user );
+                System.out.print( "\t" + movie.getProperty( "name" ) );
+            }
+            System.out.println();
+        }
+
     }
 
     private static String findTravelTime(String departure, String arrival, Date departureHour) {
@@ -222,7 +478,16 @@ public class Setram {
         String searchUrlPart2BeforeStop = "&StopArea=";
         String searchUrlPart3BeforeDate = "&Date=";
 
-        // We read Neo4J data and launch the process that get the site's data and record in MondoDB
+        // We first delete all MongoDB records no more needed
+
+        Date date = DateUtils.addDays(now, -1);
+
+        BasicDBObject dateQuery = new BasicDBObject();
+        dateQuery.put("stopDate", new BasicDBObject("$lt", date));
+
+        myCollection.remove(dateQuery);
+
+        // We read Neo4J data and launch the process that get the site's data and record in MongoDB
 
         try {
             StatementResult resultBusLines = session.run("MATCH (n) " +
@@ -355,5 +620,6 @@ public class Setram {
         }
         return collection;
     }
+*/
 
 }
