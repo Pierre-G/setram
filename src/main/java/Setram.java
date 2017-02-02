@@ -65,10 +65,10 @@ public class Setram {
 
         try {
             get("/", (req, res) -> display() );
-/*
+
             get("/timetable/", (req, res) -> addToTimetable() );
-            get("/test/", (req, res) -> test3() );
-*/
+//            get("/test/", (req, res) -> test3() );
+
             get("/init/", (req, res) -> initNeo4jDb() );
             get("/read/", (req, res) -> readNeo4jDb());
             get("/donotsleep/", (req, res) -> donotsleep() );
@@ -384,8 +384,6 @@ public class Setram {
         try ( Transaction tx = graphDb.beginTx() )
         {
             for (String busLine : busLines) {
-                System.out.println(busLine);
-                System.out.println(stopArea);
 
                 Node busNode = graphDb.findNode(BUS, "name", busLine);
                 if (busNode == null) {
@@ -397,8 +395,6 @@ public class Setram {
                 for( Relationship relationship : relationships )
                 {
                     if (relationship.getOtherNode(busNode).equals(stopNode)) {
-                        System.out.println("refs = " + relationship.getProperty("refs").toString());
-                        System.out.println("ran = " + relationship.getProperty("ran").toString());
                         params[1] = new NameValuePair("refs", relationship.getProperty("refs").toString());
                         params[2] = new NameValuePair("ran", relationship.getProperty("ran").toString());
 
@@ -420,15 +416,45 @@ public class Setram {
         return realMinutesBeforeDepartures;
     }
 
-/*
+
     private static String addToTimetable() throws IOException, ParseException {
 
-        // We open MongoDB and Neo4J connections
-
+        // We open MongoDB connection
         DBCollection myCollection = connectToMongoDB("timetable");
 
-        Driver driver = GraphDatabase.driver( System.getenv("GRAPHENEDB_BOLT_URL"), AuthTokens.basic( System.getenv("GRAPHENEDB_BOLT_USER"), System.getenv("GRAPHENEDB_BOLT_PASSWORD") ) );
-        Session session = driver.session();
+        // We first delete all MongoDB records no more needed
+
+        Date date = DateUtils.addDays(new Date(), -1);
+
+        BasicDBObject dateQuery = new BasicDBObject();
+        dateQuery.put("stopDate", new BasicDBObject("$lt", date));
+
+        myCollection.remove(dateQuery);
+
+        // We read Neo4J data and launch the process that get the site's data and record in MongoDB
+
+        try ( Transaction tx = graphDb.beginTx() ) {
+
+            ResourceIterator<Node> busNodes = graphDb.findNodes(BUS);
+            writeTimetable(busNodes);
+
+            ResourceIterator<Node> tramNodes = graphDb.findNodes(TRAM);
+            writeTimetable(tramNodes);
+
+            tx.success();
+
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+        return "Capture terminée";
+
+    }
+
+    private static void writeTimetable(ResourceIterator<Node> busOrTramNodes) {
+
+        // We open MongoDB connection
+        DBCollection myCollection = connectToMongoDB("timetable");
 
         // We build needed strings
 
@@ -450,44 +476,24 @@ public class Setram {
         String searchUrlPart2BeforeStop = "&StopArea=";
         String searchUrlPart3BeforeDate = "&Date=";
 
-        // We first delete all MongoDB records no more needed
-
-        Date date = DateUtils.addDays(now, -1);
-
-        BasicDBObject dateQuery = new BasicDBObject();
-        dateQuery.put("stopDate", new BasicDBObject("$lt", date));
-
-        myCollection.remove(dateQuery);
-
-        // We read Neo4J data and launch the process that get the site's data and record in MongoDB
-
-        try {
-            StatementResult resultBusLines = session.run("MATCH (n) " +
-                    "WHERE n:Bus OR n:Tram " +
-                    "RETURN n.name AS name, n.stringForTimetable AS stringForTimetable");
-            while (resultBusLines.hasNext()) {
-                Record busLineRecord = resultBusLines.next();
-                StatementResult resultStops = session.run("MATCH (n {name: {busLine}})-[STOPS_AT]->(s)" +
-                                "RETURN s.name AS name, s.stringForTimetable AS stringForTimetable",
-                        parameters("busLine", busLineRecord.get("name").asString()));
-                while (resultStops.hasNext()) {
-                    Record stopRecord = resultStops.next();
-                    String searchUrlWithoutDate = searchUrlPart1BeforeBusLine + busLineRecord.get("stringForTimetable").asString() + searchUrlPart2BeforeStop + stopRecord.get("stringForTimetable").asString() + searchUrlPart3BeforeDate;
-                    captureTimetable(busLineRecord.get("name").asString(), stopRecord.get("name").asString(), searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl, myCollection);
+        try ( Transaction tx = graphDb.beginTx() ) {
+            while (busOrTramNodes.hasNext()) {
+                Node busNode = busOrTramNodes.next();
+                Iterable<Relationship> relationships = busNode.getRelationships(STOPS_AT, Direction.OUTGOING);
+                for (Relationship relationship : relationships) {
+                    Node stopNode = relationship.getOtherNode(busNode);
+                    String searchUrlWithoutDate = searchUrlPart1BeforeBusLine + busNode.getProperty("stringForTimetable").toString() + searchUrlPart2BeforeStop + stopNode.getProperty("stringForTimetable").toString() + searchUrlPart3BeforeDate;
+                    captureTimetable(busNode.getProperty("name").toString(), stopNode.getProperty("name").toString(), searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl, myCollection);
                     Thread.sleep(1000); // To be nice
                 }
             }
+            tx.success();
+
         } catch (Exception e) {
-            System.out.println("ERROR: " + e);
+            System.out.println(e);
         }
-
-        driver.close();
-        session.close();
-
-        return "Capture terminée";
-
     }
-*/
+
 
     private static ArrayList<NameValuePair> addRealMinutesBeforeDepartures(String busLine, ArrayList<NameValuePair> realMinutesBeforeDepartures, NameValuePair params[], Date now, SimpleDateFormat isoDateFormat, String day) {
 
