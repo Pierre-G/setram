@@ -46,6 +46,7 @@ import java.io.IOException;
 public class Setram {
 
     static GraphDatabaseService graphDb;
+    static DBCollection myCollection;
 
     private static final RelationshipType NEXT = RelationshipType.withName( "NEXT" );
     private static final RelationshipType STOPS_AT = RelationshipType.withName( "STOPS_AT" );
@@ -57,9 +58,14 @@ public class Setram {
 
     public static void main(String[] args) {
 
+        // We open databases connections
+
+        myCollection = connectToMongoDB("timetable");
+
         File data = new File("data");
         graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
         registerShutdownHook( graphDb );
+
 
         port(Integer.valueOf(System.getenv("PORT")));
 
@@ -161,7 +167,7 @@ public class Setram {
 
 
 
-    private static String addMinutesToNextStop(String busLine, String departure, String arrival, DBCollection myCollection) {
+    private static String addMinutesToNextStop(String busLine, String departure, String arrival) {
 
         try {
 
@@ -419,9 +425,6 @@ public class Setram {
 
     private static String addToTimetable() throws IOException, ParseException {
 
-        // We open MongoDB connection
-        DBCollection myCollection = connectToMongoDB("timetable");
-
         // We first delete all MongoDB records no more needed
 
         Date date = DateUtils.addDays(new Date(), -1);
@@ -453,9 +456,6 @@ public class Setram {
 
     private static void writeTimetable(ResourceIterator<Node> busOrTramNodes) {
 
-        // We open MongoDB connection
-        DBCollection myCollection = connectToMongoDB("timetable");
-
         // We build needed strings
 
         Date now = new Date();
@@ -483,7 +483,7 @@ public class Setram {
                 for (Relationship relationship : relationships) {
                     Node stopNode = relationship.getOtherNode(busNode);
                     String searchUrlWithoutDate = searchUrlPart1BeforeBusLine + busNode.getProperty("stringForTimetable").toString() + searchUrlPart2BeforeStop + stopNode.getProperty("stringForTimetable").toString() + searchUrlPart3BeforeDate;
-                    captureTimetable(busNode.getProperty("name").toString(), stopNode.getProperty("name").toString(), searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl, myCollection);
+                    captureTimetable(busNode.getProperty("name").toString(), stopNode.getProperty("name").toString(), searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
                     Thread.sleep(1000); // To be nice
                 }
             }
@@ -554,7 +554,7 @@ public class Setram {
     };
 
 
-    private static void captureTimetable(String busLine, String stop, String searchUrlWithoutDate, SimpleDateFormat isoDateFormat, String day, String dayForSearchUrl, DBCollection myCollection) throws IOException, ParseException {
+    private static void captureTimetable(String busLine, String stop, String searchUrlWithoutDate, SimpleDateFormat isoDateFormat, String day, String dayForSearchUrl) throws IOException, ParseException {
 
         Document doc = Jsoup.connect(searchUrlWithoutDate + dayForSearchUrl).get();
 
