@@ -93,6 +93,8 @@ public class Setram {
 
     private static String initNeo4jDb() throws IOException {
 
+        System.out.println("Init - Start");
+
         graphDb.shutdown();
         clearNeo4jDb();
 
@@ -109,6 +111,7 @@ public class Setram {
         } catch (Exception e) {
             System.out.println(e);
         }
+        System.out.println("Init - End");
         return "OK";
     }
 
@@ -425,6 +428,8 @@ public class Setram {
 
     private static String addToTimetable() throws IOException, ParseException {
 
+        System.out.println("addToTimetable - Start");
+
         // We first delete all MongoDB records no more needed
 
         Date date = DateUtils.addDays(new Date(), -1);
@@ -433,28 +438,7 @@ public class Setram {
         dateQuery.put("stopDate", new BasicDBObject("$lt", date));
 
         myCollection.remove(dateQuery);
-
-        // We read Neo4J data and launch the process that get the site's data and record in MongoDB
-
-        try ( Transaction tx = graphDb.beginTx() ) {
-
-            ResourceIterator<Node> busNodes = graphDb.findNodes(BUS);
-            writeTimetable(busNodes);
-
-            ResourceIterator<Node> tramNodes = graphDb.findNodes(TRAM);
-            writeTimetable(tramNodes);
-
-            tx.success();
-
-        } catch (Exception e) {
-            System.out.println(e);
-        }
-
-        return "Capture terminée";
-
-    }
-
-    private static void writeTimetable(ResourceIterator<Node> busOrTramNodes) {
+        System.out.println("\t Removing of old MongoDB records - Success");
 
         // We build needed strings
 
@@ -476,12 +460,36 @@ public class Setram {
         String searchUrlPart2BeforeStop = "&StopArea=";
         String searchUrlPart3BeforeDate = "&Date=";
 
+        // We read Neo4J data and launch the process that get the site's data and record in MongoDB
+
+        try ( Transaction tx = graphDb.beginTx() ) {
+
+            ResourceIterator<Node> busNodes = graphDb.findNodes(BUS);
+            writeTimetable(busNodes, isoDateFormat, day, dayForSearchUrl, searchUrlPart1BeforeBusLine,searchUrlPart2BeforeStop, searchUrlPart3BeforeDate);
+
+            ResourceIterator<Node> tramNodes = graphDb.findNodes(TRAM);
+            writeTimetable(tramNodes, isoDateFormat, day, dayForSearchUrl, searchUrlPart1BeforeBusLine,searchUrlPart2BeforeStop, searchUrlPart3BeforeDate);
+
+            tx.success();
+
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+        return "Capture terminée";
+
+    }
+
+    private static void writeTimetable(ResourceIterator<Node> busOrTramNodes, SimpleDateFormat isoDateFormat, String day, String dayForSearchUrl, String searchUrlPart1BeforeBusLine,String searchUrlPart2BeforeStop, String searchUrlPart3BeforeDate) {
+
         try ( Transaction tx = graphDb.beginTx() ) {
             while (busOrTramNodes.hasNext()) {
                 Node busNode = busOrTramNodes.next();
+                System.out.println("writeTimetable - Bus " + busNode.getProperty("name").toString());
                 Iterable<Relationship> relationships = busNode.getRelationships(STOPS_AT, Direction.OUTGOING);
                 for (Relationship relationship : relationships) {
                     Node stopNode = relationship.getOtherNode(busNode);
+                    System.out.println("\t Stop : " + stopNode.getProperty("name").toString());
                     String searchUrlWithoutDate = searchUrlPart1BeforeBusLine + busNode.getProperty("stringForTimetable").toString() + searchUrlPart2BeforeStop + stopNode.getProperty("stringForTimetable").toString() + searchUrlPart3BeforeDate;
                     captureTimetable(busNode.getProperty("name").toString(), stopNode.getProperty("name").toString(), searchUrlWithoutDate, isoDateFormat, day, dayForSearchUrl);
                     Thread.sleep(1000); // To be nice
