@@ -56,16 +56,19 @@ public class Setram {
     private static final Label TRAM = Label.label( "Tram" );
 
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
 
         // We open databases connections
 
         myCollection = connectToMongoDB("timetable");
 
+        clearNeo4jDb();
+
         File data = new File("data");
         graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
         registerShutdownHook( graphDb );
 
+        initNeo4jDb();
 
         port(Integer.valueOf(System.getenv("PORT")));
 
@@ -75,7 +78,7 @@ public class Setram {
             get("/timetable/", (req, res) -> addToTimetable() );
 //            get("/test/", (req, res) -> test3() );
 
-            get("/init/", (req, res) -> initNeo4jDb() );
+//            get("/init/", (req, res) -> initNeo4jDb() );
             get("/read/", (req, res) -> readNeo4jDb());
             get("/donotsleep/", (req, res) -> donotsleep() );
 
@@ -94,14 +97,14 @@ public class Setram {
     private static String initNeo4jDb() throws IOException {
 
         System.out.println("Init - Start");
-
+/*
         graphDb.shutdown();
         clearNeo4jDb();
 
         File data = new File("data");
         graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
         registerShutdownHook( graphDb );
-
+*/
         String query = "";
         query = readFile("Neo4j-data.cypher", Charset.defaultCharset());
         try ( Transaction tx = graphDb.beginTx() )
@@ -476,6 +479,7 @@ public class Setram {
             System.out.println(e);
         }
 
+        System.out.println("addToTimetable - End");
         return "Capture terminée";
 
     }
@@ -485,7 +489,7 @@ public class Setram {
         try ( Transaction tx = graphDb.beginTx() ) {
             while (busOrTramNodes.hasNext()) {
                 Node busNode = busOrTramNodes.next();
-                System.out.println("writeTimetable - Bus " + busNode.getProperty("name").toString());
+                System.out.println("writeTimetable - " + busNode.getProperty("name").toString());
                 Iterable<Relationship> relationships = busNode.getRelationships(STOPS_AT, Direction.OUTGOING);
                 for (Relationship relationship : relationships) {
                     Node stopNode = relationship.getOtherNode(busNode);
