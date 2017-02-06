@@ -26,8 +26,13 @@ import org.jsoup.select.Elements;
 import org.neo4j.driver.v1.*;
 import static org.neo4j.driver.v1.Values.parameters;
 */
+import org.neo4j.graphalgo.GraphAlgoFactory;
+import org.neo4j.graphalgo.PathFinder;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
+import org.neo4j.graphdb.traversal.Evaluators;
+import org.neo4j.graphdb.traversal.TraversalDescription;
+import org.neo4j.graphdb.traversal.Traverser;
 import org.neo4j.io.fs.FileUtils;
 
 import java.io.File;
@@ -58,7 +63,7 @@ public class Setram {
 
     public static void main(String[] args) throws IOException {
 
-        // We open databases connections
+        // We open MongoDB connection, delete Neo4J files (not sure if needed), launch Neo4J database and load cypher file
 
         myCollection = connectToMongoDB("timetable");
 
@@ -70,15 +75,16 @@ public class Setram {
 
         initNeo4jDb();
 
+        // We parameterize SparkJava
+
         port(Integer.valueOf(System.getenv("PORT")));
 
         try {
             get("/", (req, res) -> display() );
 
             get("/timetable/", (req, res) -> addToTimetable() );
-//            get("/test/", (req, res) -> test3() );
+            get("/test/", (req, res) -> test3() );
 
-//            get("/init/", (req, res) -> initNeo4jDb() );
             get("/read/", (req, res) -> readNeo4jDb());
             get("/donotsleep/", (req, res) -> donotsleep() );
 
@@ -89,6 +95,39 @@ public class Setram {
     }
 
 
+
+    private static String test3() {
+
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            Node startNode = graphDb.findNode(STOP, "name","Université");
+            Node endNode = graphDb.findNode(STOP, "name","Californie");
+
+            PathFinder<Path> finder = GraphAlgoFactory.shortestPath(
+                    PathExpanders.forTypeAndDirection( NEXT, Direction.OUTGOING ), 30 );
+            Iterable<Path> paths = finder.findAllPaths(startNode, endNode);
+
+            Integer n = 0;
+            for (Path path : paths) {
+                n++;
+                System.out.println("Path #" + n + " (" + path.length() + ")");
+                Iterable<Node> nodes = path.nodes();
+                for (Node node : nodes) {
+                    System.out.println("\t" + node.getProperty("name"));
+                }
+            }
+
+            tx.success();
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+        return "OK";
+
+    }
+
+
+
     private static String donotsleep() {
         return "I'm awake!";
     }
@@ -97,14 +136,6 @@ public class Setram {
     private static String initNeo4jDb() throws IOException {
 
         System.out.println("Init - Start");
-/*
-        graphDb.shutdown();
-        clearNeo4jDb();
-
-        File data = new File("data");
-        graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(data);
-        registerShutdownHook( graphDb );
-*/
         String query = "";
         query = readFile("Neo4j-data.cypher", Charset.defaultCharset());
         try ( Transaction tx = graphDb.beginTx() )
