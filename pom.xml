@@ -14,6 +14,17 @@
             <artifactId>spark-core</artifactId>
             <version>2.5.4</version>
         </dependency>
+        <!-- We are going to use a simple Java HTML Builder (j2html) to generate our messages -->
+        <dependency>
+            <groupId>com.j2html</groupId>
+            <artifactId>j2html</artifactId>
+            <version>0.88</version>
+        </dependency>
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20160810</version>
+        </dependency>
         <!-- HTMLUnit for crawling purposes -->
         <dependency>
             <groupId>net.sourceforge.htmlunit</groupId>
