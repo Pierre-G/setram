@@ -4,10 +4,8 @@
 
 import static org.apache.commons.lang3.StringUtils.isNumeric;
 import static org.apache.commons.lang3.StringUtils.remove;
-import org.apache.commons.lang3.time.DateUtils;
 import static org.apache.commons.lang3.time.DateUtils.addDays;
 import static spark.Spark.port;
-import static spark.Spark.threadPool;
 import static spark.Spark.get;
 
 import com.gargoylesoftware.htmlunit.HttpMethod;
@@ -18,13 +16,16 @@ import com.gargoylesoftware.htmlunit.html.DomText;
 import com.gargoylesoftware.htmlunit.util.NameValuePair;
 
 import com.mongodb.*;
-
+import org.apache.commons.lang3.time.DateUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 import org.jsoup.select.Elements;
-
+/*
+import org.neo4j.driver.v1.*;
+import static org.neo4j.driver.v1.Values.parameters;
+*/
 import org.neo4j.graphalgo.GraphAlgoFactory;
 import org.neo4j.graphalgo.PathFinder;
 import org.neo4j.graphdb.*;
@@ -46,9 +47,9 @@ import java.io.IOException;
 
 public class Setram {
 
-    private static GraphDatabaseService graphDb;
-    private static DBCollection timetableCollection;
-    private static DBCollection pathsCollection;
+    static GraphDatabaseService graphDb;
+    static DBCollection timetableCollection;
+    static DBCollection pathsCollection;
 
     private static final RelationshipType NEXT = RelationshipType.withName( "NEXT" );
     private static final RelationshipType STOPS_AT = RelationshipType.withName( "STOPS_AT" );
@@ -76,7 +77,6 @@ public class Setram {
         // We parameterize SparkJava
 
         port(Integer.valueOf(System.getenv("PORT")));
-        threadPool(8, 2, 60000); // to avoid timeout error
 
         try {
             get("/", (req, res) -> display() );
@@ -92,6 +92,7 @@ public class Setram {
         }
 
     }
+
 
 
     private static String test3() {
@@ -149,6 +150,7 @@ public class Setram {
                     document.put("stops", stopsArray);
                     document.put("relationships", relationshipsArray);
                     documents.add(document);
+//                    pathsCollection.insert(document);
                 }
 
                 i++;
