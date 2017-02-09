@@ -97,12 +97,14 @@ public class Setram {
 
     private static String test3() {
 
+        // Delete all documents from pathsCollection Using blank BasicDBObject
+        BasicDBObject voidDocument = new BasicDBObject();
+        pathsCollection.remove(voidDocument);
+
+        List<BasicDBObject> documents = new ArrayList<>();
+
         try ( Transaction tx = graphDb.beginTx() )
         {
-            // Delete all documents from pathsCollection Using blank BasicDBObject
-            BasicDBObject voidDocument = new BasicDBObject();
-            pathsCollection.remove(voidDocument);
-
             Node startNode = graphDb.findNode(STOP, "name","Université");
             Node endNode = graphDb.findNode(STOP, "name","Californie");
 
@@ -111,8 +113,6 @@ public class Setram {
             Iterable<Path> paths = finder.findAllPaths(startNode, endNode);
 
             System.out.println("All paths found");
-
-//            List<BasicDBObject> documents = new ArrayList<>();
 
             Integer i = 0;
             for (Path path : paths) {
@@ -149,20 +149,21 @@ public class Setram {
                     document.put("changes", relationshipsVariationNumber - 1);
                     document.put("stops", stopsArray);
                     document.put("relationships", relationshipsArray);
-//                    documents.add(document);
-                    pathsCollection.insert(document);
+                    documents.add(document);
+//                    pathsCollection.insert(document);
                 }
 
                 i++;
             }
 
             System.out.println("Paths found: " + i);
-//            pathsCollection.insert(documents);
 
             tx.success();
         } catch (Exception e) {
             System.out.println(e);
         }
+
+        pathsCollection.insert(documents);
 
         return "OK";
 
