@@ -115,23 +115,8 @@ public class Setram {
             Integer i = 0;
             for (Path path : paths) {
 
-                BasicDBObject document = new BasicDBObject();
-
-                document.put("path number", i);
-
-                String[] stopsArray = new String[path.length()+1];
-                String[] relationshipsArray = new String[path.length()];
-
-                document.put("path length", path.length());
-
-                Iterable<Node> nodes = path.nodes();
                 Iterable<Relationship> relationships = path.relationships();
-
-                Integer n = 0;
-                for (Node node : nodes) {
-                    stopsArray[n] = node.getProperty("name").toString();
-                    n++;
-                }
+                String[] relationshipsArray = new String[path.length()];
 
                 Integer r = 0;
                 String previousRelationship = "";
@@ -145,10 +130,25 @@ public class Setram {
                     r++;
                 }
 
-                document.put("stops", stopsArray);
-                document.put("relationships", relationshipsArray);
-                document.put("changes", relationshipsVariationNumber - 1);
-                documents.add(document);
+                if (relationshipsVariationNumber < 4) { // To avoid out of memory, we record only paths with minimum changes
+                    BasicDBObject document = new BasicDBObject();
+
+                    String[] stopsArray = new String[path.length()+1];
+
+                    Iterable<Node> nodes = path.nodes();
+
+                    Integer n = 0;
+                    for (Node node : nodes) {
+                        stopsArray[n] = node.getProperty("name").toString();
+                        n++;
+                    }
+
+                    document.put("path length", path.length());
+                    document.put("changes", relationshipsVariationNumber - 1);
+                    document.put("stops", stopsArray);
+                    document.put("relationships", relationshipsArray);
+                    documents.add(document);
+                }
 
                 i++;
             }
