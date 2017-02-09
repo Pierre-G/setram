@@ -110,7 +110,9 @@ public class Setram {
                     PathExpanders.forTypeAndDirection( NEXT, Direction.OUTGOING ), 30);
             Iterable<Path> paths = finder.findAllPaths(startNode, endNode);
 
-            List<BasicDBObject> documents = new ArrayList<>();
+            System.out.println("All paths found");
+
+//            List<BasicDBObject> documents = new ArrayList<>();
 
             Integer i = 0;
             for (Path path : paths) {
@@ -147,14 +149,15 @@ public class Setram {
                     document.put("changes", relationshipsVariationNumber - 1);
                     document.put("stops", stopsArray);
                     document.put("relationships", relationshipsArray);
-                    documents.add(document);
+//                    documents.add(document);
+                    pathsCollection.insert(document);
                 }
 
                 i++;
             }
 
             System.out.println("Paths found: " + i);
-            pathsCollection.insert(documents);
+//            pathsCollection.insert(documents);
 
             tx.success();
         } catch (Exception e) {
