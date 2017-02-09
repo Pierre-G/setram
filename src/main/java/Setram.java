@@ -30,9 +30,6 @@ import org.neo4j.graphalgo.GraphAlgoFactory;
 import org.neo4j.graphalgo.PathFinder;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
-import org.neo4j.graphdb.traversal.Evaluators;
-import org.neo4j.graphdb.traversal.TraversalDescription;
-import org.neo4j.graphdb.traversal.Traverser;
 import org.neo4j.io.fs.FileUtils;
 
 import java.io.File;
@@ -51,7 +48,8 @@ import java.io.IOException;
 public class Setram {
 
     static GraphDatabaseService graphDb;
-    static DBCollection myCollection;
+    static DBCollection timetableCollection;
+    static DBCollection pathsCollection;
 
     private static final RelationshipType NEXT = RelationshipType.withName( "NEXT" );
     private static final RelationshipType STOPS_AT = RelationshipType.withName( "STOPS_AT" );
@@ -65,7 +63,8 @@ public class Setram {
 
         // We open MongoDB connection, delete Neo4J files (not sure if needed), launch Neo4J database and load cypher file
 
-        myCollection = connectToMongoDB("timetable");
+        timetableCollection = connectToMongoDB("timetable");
+        pathsCollection = connectToMongoDB("paths");
 
         clearNeo4jDb();
 
@@ -100,22 +99,62 @@ public class Setram {
 
         try ( Transaction tx = graphDb.beginTx() )
         {
+            // Delete all documents from pathsCollection Using blank BasicDBObject
+            BasicDBObject voidDocument = new BasicDBObject();
+            pathsCollection.remove(voidDocument);
+
             Node startNode = graphDb.findNode(STOP, "name","Université");
             Node endNode = graphDb.findNode(STOP, "name","Californie");
 
-            PathFinder<Path> finder = GraphAlgoFactory.shortestPath(
-                    PathExpanders.forTypeAndDirection( NEXT, Direction.OUTGOING ), 30 );
+            PathFinder<Path> finder = GraphAlgoFactory.allSimplePaths(
+                    PathExpanders.forTypeAndDirection( NEXT, Direction.OUTGOING ), 30);
             Iterable<Path> paths = finder.findAllPaths(startNode, endNode);
 
-            Integer n = 0;
+            List<BasicDBObject> documents = new ArrayList<>();
+
+            Integer i = 0;
             for (Path path : paths) {
-                n++;
-                System.out.println("Path #" + n + " (" + path.length() + ")");
+
+                BasicDBObject document = new BasicDBObject();
+
+                document.put("path number", i);
+
+                String[] stopsArray = new String[path.length()+1];
+                String[] relationshipsArray = new String[path.length()];
+
+                document.put("path length", path.length());
+
                 Iterable<Node> nodes = path.nodes();
+                Iterable<Relationship> relationships = path.relationships();
+
+                Integer n = 0;
                 for (Node node : nodes) {
-                    System.out.println("\t" + node.getProperty("name"));
+                    stopsArray[n] = node.getProperty("name").toString();
+                    n++;
                 }
+
+                Integer r = 0;
+                String previousRelationship = "";
+                Integer relationshipsVariationNumber = 0;
+                for (Relationship relationship : relationships) {
+                    relationshipsArray[r] = relationship.getProperty("for").toString();
+                    if ( ! relationship.getProperty("for").toString().equals(previousRelationship) ) {
+                        relationshipsVariationNumber++;
+                        previousRelationship = relationship.getProperty("for").toString();
+                    }
+                    r++;
+                }
+
+                document.put("stops", stopsArray);
+                document.put("relationships", relationshipsArray);
+                document.put("changes", relationshipsVariationNumber - 1);
+                documents.add(document);
+
+                i++;
             }
+
+            System.out.println("Paths found: " + i);
+            pathsCollection.insert(documents);
 
             tx.success();
         } catch (Exception e) {
@@ -214,7 +253,7 @@ public class Setram {
             obj1.add(new BasicDBObject("stop", departure));
             andQuery.put("$and", obj1);
 
-            DBObject doc1 = myCollection.findOne(andQuery);
+            DBObject doc1 = timetableCollection.findOne(andQuery);
             Date date1 = (Date) doc1.get("stopDate");
 
             BasicDBObject dateQuery = new BasicDBObject();
@@ -227,7 +266,7 @@ public class Setram {
             obj2.add(dateQuery);
             andQuery2.put("$and", obj2);
 
-            DBObject doc2 = myCollection.findOne(andQuery2);
+            DBObject doc2 = timetableCollection.findOne(andQuery2);
             if (doc2 != null) {
                 Date date2 = (Date) doc2.get("stopDate");
                 Long minutesToNextStop = Duration.between(date1.toInstant(), date2.toInstant()).toMinutes();
@@ -279,7 +318,7 @@ public class Setram {
         try {
             // We open MongoDB and Neo4J connections
 
-            DBCollection myCollection = connectToMongoDB("timetable");
+            DBCollection timetableCollection = connectToMongoDB("timetable");
 
             Driver driver = GraphDatabase.driver( System.getenv("GRAPHENEDB_BOLT_URL"), AuthTokens.basic( System.getenv("GRAPHENEDB_BOLT_USER"), System.getenv("GRAPHENEDB_BOLT_PASSWORD") ) );
             Session session = driver.session();
@@ -301,7 +340,7 @@ public class Setram {
                     while (resultNextStops.hasNext()) {
                         Record nextStopRecord = resultNextStops.next();
                         System.out.println("departure : " + stopRecord.get("name") + " ;    arrival : " + nextStopRecord.get("name"));
-                        String tempVar = addMinutesToNextStop(busLineRecord.get("name").asString(), stopRecord.get("name").asString(), nextStopRecord.get("name").asString(), myCollection);
+                        String tempVar = addMinutesToNextStop(busLineRecord.get("name").asString(), stopRecord.get("name").asString(), nextStopRecord.get("name").asString(), timetableCollection);
                         System.out.println(tempVar);
                     }
                 }
@@ -471,7 +510,7 @@ public class Setram {
         BasicDBObject dateQuery = new BasicDBObject();
         dateQuery.put("stopDate", new BasicDBObject("$lt", date));
 
-        myCollection.remove(dateQuery);
+        timetableCollection.remove(dateQuery);
         System.out.println("\t Removing of old MongoDB records - Success");
 
         // We build needed strings
@@ -620,7 +659,7 @@ public class Setram {
                         document.put("busLine", busLine);
                         document.put("stop", stop);
                         document.put("stopDate", date);
-                        myCollection.update(document, document, true, false); // Upsert allows to insert only if it doesn't already exists
+                        timetableCollection.update(document, document, true, false); // Upsert allows to insert only if it doesn't already exists
                     }
                 }
             }
