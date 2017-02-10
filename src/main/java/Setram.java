@@ -70,7 +70,7 @@ public class Setram {
         registerShutdownHook( graphDb );
 
         initNeo4jDb();
-        recordPathsBetweenAllStops();
+//        recordPathsBetweenAllStops(); // Make the application crash
 
         // We parameterize SparkJava
 
@@ -80,7 +80,7 @@ public class Setram {
             get("/", (req, res) -> display() );
 
             get("/timetable/", (req, res) -> addToTimetable() );
-//            get("/test/", (req, res) -> recordPathsBetweenAllStops() );
+            get("/test/", (req, res) -> recordPathsBetweenAllStops() );
 
             get("/read/", (req, res) -> readNeo4jDb());
             get("/donotsleep/", (req, res) -> donotsleep() );
@@ -92,7 +92,7 @@ public class Setram {
     }
 
 
-    private static void recordPathsBetweenAllStops() {
+    private static String recordPathsBetweenAllStops() {
 
         // Delete all documents from pathsCollection Using blank BasicDBObject
         BasicDBObject voidDocument = new BasicDBObject();
@@ -103,38 +103,34 @@ public class Setram {
         {
             // Find all Stops
             ResourceIterator<Node> stops = graphDb.findNodes(STOP);
+            ResourceIterator<Node> stops2 = stops;
             Integer i = 0;
             while( stops.hasNext() )
             {
                 Node stop = stops.next();
-                allStops.add(stop.getProperty("name").toString());
+                while (stops2.hasNext()) {
+                    Node stop2 = stops2.next();
+                    if (stop != stop2) {
+                        recordPathsBetweenTwoStops(stop, stop2);
+                    }
+                }
             }
             tx.success();
         } catch (Exception e) {
             System.out.println(e);
         }
 
-        for (int i = 0; i < allStops.size(); i++)
-        {
-            for (int j = 0; j < allStops.size(); j++) {
-                if (j != i) {
-                    recordPathsBetweenTwoStops(allStops.get(i).toString(), allStops.get(j).toString());
-                }
-            }
-        }
-
+        return "OK";
     }
 
-    private static void recordPathsBetweenTwoStops(String departure, String arrival) {
+    private static void recordPathsBetweenTwoStops(Node departureNode, Node arrivalNode) {
 
         List<BasicDBObject> documents = new ArrayList<>();
-
+/*
         try ( Transaction tx = graphDb.beginTx() )
         {
-            Node departureNode = graphDb.findNode(STOP, "name",departure);
-            Node arrivalNode = graphDb.findNode(STOP, "name",arrival);
-
-            System.out.println("Searching paths between " + departure + " and " + arrival);
+*/
+            System.out.println("Searching paths between " + departureNode.getProperty("name") + " and " + arrivalNode.getProperty("name"));
 
             PathFinder<Path> finder = GraphAlgoFactory.allSimplePaths(
                     PathExpanders.forTypeAndDirection( NEXT, Direction.OUTGOING ), 30);
@@ -142,7 +138,6 @@ public class Setram {
 
             Integer i = 0;
             for (Path path : paths) {
-
                 Iterable<Relationship> relationships = path.relationships();
                 Map<Integer, String> directions = new HashMap<>();
                 Map<Integer, String> stopsWithDirections = new HashMap<>();
@@ -162,8 +157,8 @@ public class Setram {
 
                 if (relationshipsVariationNumber < 4) { // We record paths with minimum changes
                     BasicDBObject document = new BasicDBObject();
-                    document.put("departure", departure);
-                    document.put("arrival", arrival);
+                    document.put("departure", departureNode.getProperty("name").toString());
+                    document.put("arrival", arrivalNode.getProperty("name").toString());
                     document.put("path length", path.length());
                     document.put("changes", relationshipsVariationNumber - 1);
                     document.put("directions", directions.toString());
@@ -172,16 +167,15 @@ public class Setram {
                 }
 
                 i++;
-
             }
 
             System.out.println("\t" + i + " path(s) found");
-
+/*
             tx.success();
         } catch (Exception e) {
             System.out.println(e);
         }
-
+*/
         pathsCollection.insert(documents);
 
     }
