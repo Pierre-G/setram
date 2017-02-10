@@ -22,10 +22,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 import org.jsoup.select.Elements;
-/*
-import org.neo4j.driver.v1.*;
-import static org.neo4j.driver.v1.Values.parameters;
-*/
+
 import org.neo4j.graphalgo.GraphAlgoFactory;
 import org.neo4j.graphalgo.PathFinder;
 import org.neo4j.graphdb.*;
@@ -73,6 +70,7 @@ public class Setram {
         registerShutdownHook( graphDb );
 
         initNeo4jDb();
+        recordPathsBetweenAllStops();
 
         // We parameterize SparkJava
 
@@ -82,7 +80,7 @@ public class Setram {
             get("/", (req, res) -> display() );
 
             get("/timetable/", (req, res) -> addToTimetable() );
-            get("/test/", (req, res) -> test3() );
+//            get("/test/", (req, res) -> recordPathsBetweenAllStops() );
 
             get("/read/", (req, res) -> readNeo4jDb());
             get("/donotsleep/", (req, res) -> donotsleep() );
@@ -94,69 +92,90 @@ public class Setram {
     }
 
 
-
-    private static String test3() {
+    private static void recordPathsBetweenAllStops() {
 
         // Delete all documents from pathsCollection Using blank BasicDBObject
         BasicDBObject voidDocument = new BasicDBObject();
         pathsCollection.remove(voidDocument);
 
+        List allStops = new ArrayList();
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            // Find all Stops
+            ResourceIterator<Node> stops = graphDb.findNodes(STOP);
+            Integer i = 0;
+            while( stops.hasNext() )
+            {
+                Node stop = stops.next();
+                allStops.add(stop.getProperty("name").toString());
+            }
+            tx.success();
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+        for (int i = 0; i < allStops.size(); i++)
+        {
+            for (int j = 0; j < allStops.size(); j++) {
+                if (j != i) {
+                    recordPathsBetweenTwoStops(allStops.get(i).toString(), allStops.get(j).toString());
+                }
+            }
+        }
+
+    }
+
+    private static void recordPathsBetweenTwoStops(String departure, String arrival) {
+
         List<BasicDBObject> documents = new ArrayList<>();
 
         try ( Transaction tx = graphDb.beginTx() )
         {
-            Node startNode = graphDb.findNode(STOP, "name","Université");
-            Node endNode = graphDb.findNode(STOP, "name","Californie");
+            Node departureNode = graphDb.findNode(STOP, "name",departure);
+            Node arrivalNode = graphDb.findNode(STOP, "name",arrival);
+
+            System.out.println("Searching paths between " + departure + " and " + arrival);
 
             PathFinder<Path> finder = GraphAlgoFactory.allSimplePaths(
                     PathExpanders.forTypeAndDirection( NEXT, Direction.OUTGOING ), 30);
-            Iterable<Path> paths = finder.findAllPaths(startNode, endNode);
-
-            System.out.println("All paths found");
+            Iterable<Path> paths = finder.findAllPaths(departureNode, arrivalNode);
 
             Integer i = 0;
             for (Path path : paths) {
 
                 Iterable<Relationship> relationships = path.relationships();
-                String[] relationshipsArray = new String[path.length()];
+                Map<Integer, String> directions = new HashMap<>();
+                Map<Integer, String> stopsWithDirections = new HashMap<>();
 
                 Integer r = 0;
                 String previousRelationship = "";
                 Integer relationshipsVariationNumber = 0;
                 for (Relationship relationship : relationships) {
-                    relationshipsArray[r] = relationship.getProperty("for").toString();
                     if ( ! relationship.getProperty("for").toString().equals(previousRelationship) ) {
-                        relationshipsVariationNumber++;
+                        directions.put(r, relationship.getProperty("for").toString());
+                        stopsWithDirections.put(r, relationship.getStartNode().getProperty("name").toString());
                         previousRelationship = relationship.getProperty("for").toString();
+                        relationshipsVariationNumber++;
                     }
                     r++;
                 }
 
-                if (relationshipsVariationNumber < 4) { // To avoid out of memory, we record only paths with minimum changes
+                if (relationshipsVariationNumber < 4) { // We record paths with minimum changes
                     BasicDBObject document = new BasicDBObject();
-
-                    String[] stopsArray = new String[path.length()+1];
-
-                    Iterable<Node> nodes = path.nodes();
-
-                    Integer n = 0;
-                    for (Node node : nodes) {
-                        stopsArray[n] = node.getProperty("name").toString();
-                        n++;
-                    }
-
+                    document.put("departure", departure);
+                    document.put("arrival", arrival);
                     document.put("path length", path.length());
                     document.put("changes", relationshipsVariationNumber - 1);
-                    document.put("stops", stopsArray);
-                    document.put("relationships", relationshipsArray);
+                    document.put("directions", directions.toString());
+                    document.put("stops with directions", stopsWithDirections.toString());
                     documents.add(document);
-//                    pathsCollection.insert(document);
                 }
 
                 i++;
+
             }
 
-            System.out.println("Paths found: " + i);
+            System.out.println("\t" + i + " path(s) found");
 
             tx.success();
         } catch (Exception e) {
@@ -164,8 +183,6 @@ public class Setram {
         }
 
         pathsCollection.insert(documents);
-
-        return "OK";
 
     }
 
