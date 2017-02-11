@@ -23,8 +23,7 @@ import org.jsoup.nodes.Element;
 
 import org.jsoup.select.Elements;
 
-import org.neo4j.graphalgo.GraphAlgoFactory;
-import org.neo4j.graphalgo.PathFinder;
+import org.neo4j.graphalgo.*;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.io.fs.FileUtils;
@@ -55,6 +54,8 @@ public class Setram {
     private static final Label BUS = Label.label( "Bus" );
     private static final Label TRAM = Label.label( "Tram" );
 
+    private static String previousRelationship;
+
 
     public static void main(String[] args) throws IOException {
 
@@ -70,7 +71,12 @@ public class Setram {
         registerShutdownHook( graphDb );
 
         initNeo4jDb();
-//        recordPathsBetweenAllStops(); // Make the application crash
+        Thread t = new Thread() {
+            public void run() {
+                recordPathsBetweenAllStops();
+            }
+        };
+        t.start();
 
         // We parameterize SparkJava
 
@@ -80,7 +86,8 @@ public class Setram {
             get("/", (req, res) -> display() );
 
             get("/timetable/", (req, res) -> addToTimetable() );
-            get("/test/", (req, res) -> recordPathsBetweenAllStops() );
+
+            get("/test/", (req, res) -> recordPathsBetweenGivenStops("Jaurès-Pavillon", "Cimetière") );
 
             get("/read/", (req, res) -> readNeo4jDb());
             get("/donotsleep/", (req, res) -> donotsleep() );
@@ -92,26 +99,44 @@ public class Setram {
     }
 
 
-    private static String recordPathsBetweenAllStops() {
+    private static String recordPathsBetweenGivenStops(String departure, String arrival) {
 
         // Delete all documents from pathsCollection Using blank BasicDBObject
         BasicDBObject voidDocument = new BasicDBObject();
         pathsCollection.remove(voidDocument);
 
-        List allStops = new ArrayList();
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            Node departureNode = graphDb.findNode(STOP, "name", departure);
+            Node arrivalNode = graphDb.findNode(STOP, "name", arrival);
+            recordPathsBetweenTwoStops(departureNode, arrivalNode);
+            tx.success();
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+        return "OK";
+    }
+
+    private static void recordPathsBetweenAllStops() {
+
+        // Delete all documents from pathsCollection using blank BasicDBObject
+        BasicDBObject voidDocument = new BasicDBObject();
+        pathsCollection.remove(voidDocument);
+
         try ( Transaction tx = graphDb.beginTx() )
         {
             // Find all Stops
-            ResourceIterator<Node> stops = graphDb.findNodes(STOP);
-            ResourceIterator<Node> stops2 = stops;
-            Integer i = 0;
-            while( stops.hasNext() )
+            ResourceIterator<Node> departureNodes = graphDb.findNodes(STOP);
+            while( departureNodes.hasNext() )
             {
-                Node stop = stops.next();
-                while (stops2.hasNext()) {
-                    Node stop2 = stops2.next();
-                    if (stop != stop2) {
-                        recordPathsBetweenTwoStops(stop, stop2);
+                Node departureNode = departureNodes.next();
+
+                ResourceIterator<Node> arrivalNodes = graphDb.findNodes(STOP);
+                while (arrivalNodes.hasNext()) {
+                    Node arrivalNode = arrivalNodes.next();
+                    if (!departureNode.getProperty("name").toString().equals(arrivalNode.getProperty("name").toString())) {
+                        recordPathsBetweenTwoStops(departureNode, arrivalNode);
                     }
                 }
             }
@@ -120,8 +145,8 @@ public class Setram {
             System.out.println(e);
         }
 
-        return "OK";
     }
+
 
     private static void recordPathsBetweenTwoStops(Node departureNode, Node arrivalNode) {
 
@@ -132,8 +157,12 @@ public class Setram {
 */
             System.out.println("Searching paths between " + departureNode.getProperty("name") + " and " + arrivalNode.getProperty("name"));
 
+            previousRelationship = "";
+
+            WeightedPath minimumPath = GraphAlgoFactory.dijkstra(PathExpanders.forTypeAndDirection( NEXT, Direction.OUTGOING ), "cost").findSinglePath(departureNode, arrivalNode);
+
             PathFinder<Path> finder = GraphAlgoFactory.allSimplePaths(
-                    PathExpanders.forTypeAndDirection( NEXT, Direction.OUTGOING ), 30);
+                    PathExpanders.forTypeAndDirection( NEXT, Direction.OUTGOING ), minimumPath.length() + 4);
             Iterable<Path> paths = finder.findAllPaths(departureNode, arrivalNode);
 
             Integer i = 0;
@@ -176,7 +205,9 @@ public class Setram {
             System.out.println(e);
         }
 */
-        pathsCollection.insert(documents);
+        if (!documents.isEmpty()) {
+            pathsCollection.insert(documents);
+        }
 
     }
 
