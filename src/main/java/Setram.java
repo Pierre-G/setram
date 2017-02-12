@@ -23,6 +23,7 @@ import org.jsoup.nodes.Element;
 
 import org.jsoup.select.Elements;
 
+import org.neo4j.cypher.internal.frontend.v2_3.ast.functions.Str;
 import org.neo4j.graphalgo.*;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
@@ -71,12 +72,6 @@ public class Setram {
         registerShutdownHook( graphDb );
 
         initNeo4jDb();
-        Thread t = new Thread() {
-            public void run() {
-                recordPathsBetweenAllStops();
-            }
-        };
-        t.start();
 
         // We parameterize SparkJava
 
@@ -88,8 +83,10 @@ public class Setram {
             get("/timetable/", (req, res) -> addToTimetable() );
 
             get("/test/", (req, res) -> recordPathsBetweenGivenStops("Jaurès-Pavillon", "Cimetière") );
+            get("/record/", (req, res) -> recordPathsBetweenAllStops() );
+            get("/resume-record/", (req, res) -> resumeRecordPathsBetweenAllStops("Pontlieue", "Le Luard") );
 
-            get("/read/", (req, res) -> readNeo4jDb());
+            get("/read/", (req, res) -> readNeo4jDb() );
             get("/donotsleep/", (req, res) -> donotsleep() );
 
         } catch(Exception e){
@@ -118,32 +115,117 @@ public class Setram {
         return "OK";
     }
 
-    private static void recordPathsBetweenAllStops() {
+    private static String resumeRecordPathsBetweenAllStops(String wantedDepartureNodeString, String wantedArrivalNodeString) {
 
-        // Delete all documents from pathsCollection using blank BasicDBObject
-        BasicDBObject voidDocument = new BasicDBObject();
-        pathsCollection.remove(voidDocument);
+        Thread t = new Thread() {
+            public void run() {
 
-        try ( Transaction tx = graphDb.beginTx() )
-        {
-            // Find all Stops
-            ResourceIterator<Node> departureNodes = graphDb.findNodes(STOP);
-            while( departureNodes.hasNext() )
-            {
-                Node departureNode = departureNodes.next();
+                boolean flagFirstWantedDepartureNode = false;
+                boolean flagFirstWantedArrivalNode = false;
 
-                ResourceIterator<Node> arrivalNodes = graphDb.findNodes(STOP);
-                while (arrivalNodes.hasNext()) {
-                    Node arrivalNode = arrivalNodes.next();
-                    if (!departureNode.getProperty("name").toString().equals(arrivalNode.getProperty("name").toString())) {
-                        recordPathsBetweenTwoStops(departureNode, arrivalNode);
+                try ( Transaction tx = graphDb.beginTx() )
+                {
+                    // Find all Stops
+                    ResourceIterator<Node> departureNodes = graphDb.findNodes(STOP);
+                    while( departureNodes.hasNext() )
+                    {
+                        Node departureNode = departureNodes.next();
+                        System.out.println("Departure: " + departureNode.getProperty("name").toString());
+                        if (!flagFirstWantedDepartureNode && departureNode.getProperty("name").toString().equals(wantedDepartureNodeString)) {
+                            flagFirstWantedDepartureNode = true;
+                        }
+
+                        if (flagFirstWantedDepartureNode) {
+                            ResourceIterator<Node> arrivalNodes = graphDb.findNodes(STOP);
+                            while (arrivalNodes.hasNext()) {
+                                Node arrivalNode = arrivalNodes.next();
+                                System.out.println("Arrival: " + arrivalNode.getProperty("name").toString());
+                                if (!flagFirstWantedArrivalNode && arrivalNode.getProperty("name").toString().equals(wantedArrivalNodeString)) {
+                                    flagFirstWantedArrivalNode = true;
+                                }
+                                if (flagFirstWantedArrivalNode) {
+                                    if (!departureNode.getProperty("name").toString().equals(arrivalNode.getProperty("name").toString())) {
+                                        recordPathsBetweenTwoStops(departureNode, arrivalNode);
+                                    }
+                                }
+                            }
+                        }
                     }
+                    tx.success();
+                } catch (Exception e) {
+                    System.out.println(e);
+                }
+
+            }
+        };
+        t.start();
+
+        return "Recording needed paths. This may take a while.";
+
+    }
+
+    private static String recordPathsBetweenAllStops() {
+
+        Thread t = new Thread() {
+            public void run() {
+
+                try {
+                    Thread.sleep(60000);    // To let the user stop the application if he launch the command by error
+                } catch (Exception e) {
+                    System.out.println(e);
+                }
+
+                // Delete all documents from pathsCollection using blank BasicDBObject
+                BasicDBObject voidDocument = new BasicDBObject();
+                pathsCollection.remove(voidDocument);
+
+                try ( Transaction tx = graphDb.beginTx() )
+                {
+                    // Find all Stops
+                    ResourceIterator<Node> departureNodes = graphDb.findNodes(STOP);
+                    while( departureNodes.hasNext() )
+                    {
+                        Node departureNode = departureNodes.next();
+
+                        ResourceIterator<Node> arrivalNodes = graphDb.findNodes(STOP);
+                        while (arrivalNodes.hasNext()) {
+                            Node arrivalNode = arrivalNodes.next();
+                            if (!departureNode.getProperty("name").toString().equals(arrivalNode.getProperty("name").toString())) {
+                                recordPathsBetweenTwoStops(departureNode, arrivalNode);
+                            }
+                        }
+                    }
+                    tx.success();
+                } catch (Exception e) {
+                    System.out.println(e);
+                }
+
+            }
+        };
+        t.start();
+
+        Thread t2 = new Thread() {
+            public void run() {
+                try {   // Count down
+                    System.out.println("60 seconds before MongoDB data erasing");
+                    Thread.sleep(10000);
+                    System.out.println("50 seconds before MongoDB data erasing");
+                    Thread.sleep(10000);
+                    System.out.println("40 seconds before MongoDB data erasing");
+                    Thread.sleep(10000);
+                    System.out.println("30 seconds before MongoDB data erasing");
+                    Thread.sleep(10000);
+                    System.out.println("20 seconds before MongoDB data erasing");
+                    Thread.sleep(10000);
+                    System.out.println("10 seconds before MongoDB data erasing");
+                } catch (Exception e) {
+                    System.out.println(e);
                 }
             }
-            tx.success();
-        } catch (Exception e) {
-            System.out.println(e);
-        }
+        };
+        t2.start();
+
+        return "Recording needed paths. This may take a while.\nYou have one minute to stop the app if you make an error.";
 
     }
 
