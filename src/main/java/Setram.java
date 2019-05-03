@@ -82,9 +82,9 @@ public class Setram {
 
             get("/timetable/", (req, res) -> addToTimetable() );
 
-            get("/test/", (req, res) -> recordPathsBetweenGivenStops("Jaurès-Pavillon", "Cimetière") );
+            get("/test/", (req, res) -> recordPathsBetweenGivenStops("Cimetière", "Jaurès-Pavillon") );
             get("/record/", (req, res) -> recordPathsBetweenAllStops() );
-            get("/resume-record/", (req, res) -> resumeRecordPathsBetweenAllStops("Pontlieue", "Le Luard") );
+            get("/resume-record/", (req, res) -> resumeRecordPathsBetweenAllStops("Guy Bouriat", "Saint-Martin") );
 
             get("/read/", (req, res) -> readNeo4jDb() );
             get("/donotsleep/", (req, res) -> donotsleep() );
@@ -130,7 +130,6 @@ public class Setram {
                     while( departureNodes.hasNext() )
                     {
                         Node departureNode = departureNodes.next();
-                        System.out.println("Departure: " + departureNode.getProperty("name").toString());
                         if (!flagFirstWantedDepartureNode && departureNode.getProperty("name").toString().equals(wantedDepartureNodeString)) {
                             flagFirstWantedDepartureNode = true;
                         }
@@ -139,7 +138,6 @@ public class Setram {
                             ResourceIterator<Node> arrivalNodes = graphDb.findNodes(STOP);
                             while (arrivalNodes.hasNext()) {
                                 Node arrivalNode = arrivalNodes.next();
-                                System.out.println("Arrival: " + arrivalNode.getProperty("name").toString());
                                 if (!flagFirstWantedArrivalNode && arrivalNode.getProperty("name").toString().equals(wantedArrivalNodeString)) {
                                     flagFirstWantedArrivalNode = true;
                                 }

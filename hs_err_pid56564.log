@@ -1,0 +1,37 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGBUS (0xa) at pc=0x000000010db49e92, pid=56564, tid=0x0000000000007b03
+#
+# JRE version: Java(TM) SE Runtime Environment (8.0_112-b16) (build 1.8.0_112-b16)
+# Java VM: Java HotSpot(TM) 64-Bit Server VM (25.112-b16 mixed mode bsd-amd64 compressed oops)
+# Problematic frame:
+# C  [libzip.dylib+0x2e92]  newEntry+0x154
+#
+# Failed to write core dump. Core dumps have been disabled. To enable core dumping, try "ulimit -c unlimited" before starting Java again
+#
+# If you would like to submit a bug report, please visit:
+#   http://bugreport.java.com/bugreport/crash.jsp
+# The crash happened outside the Java Virtual Machine in native code.
+# See problematic frame for where to report the bug.
+#
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x00007fcd7b024800):  JavaThread "Thread-2" [_thread_in_native, id=31491, stack(0x0000700003874000,0x0000700003974000)]
+
+siginfo: si_signo: 10 (SIGBUS), si_code: 2 (BUS_ADRERR), si_addr: 0x000000012c699873
+
+Registers:
+RAX=0x00007fcd74f0dc50, RBX=0x000000012c699867, RCX=0x0000000000000001, RDX=0x0000000000000300
+RSP=0x0000700003970610, RBP=0x0000700003970670, RSI=0x0000000000004000, RDI=0x0000000000000323
+R8 =0x0000000000000048, R9 =0x00007fcd77532290, R10=0x00000000ffffc000, R11=0x00006ff891164c4e
+R12=0x000000012cb12000, R13=0x0000000000027b20, R14=0x00000000bd74148c, R15=0x00007fcd74f3ef30
+RIP=0x000000010db49e92, EFLAGS=0x0000000000010202, ERR=0x0000000000000004
+  TRAPNO=0x000000000000000e
+
+Top of Stack: (sp=0x0000700003970610)
+0x0000700003970610:   0000700003970690 0000000003970660
+0x0000700003970620:   0000700003970c60 000000010ed4030b
+0x0000700003970630:   0000700003970650 00007fcd74f0dc50
+0x0000700003970640:   00007fcd77532290
